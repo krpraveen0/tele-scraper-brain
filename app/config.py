@@ -15,8 +15,12 @@ class Settings:
     source_chats: list[str]
     destination_chat: str
     briefing_chat: str
+    llm_provider: str
     ollama_url: str
     ollama_model: str
+    opencode_model: str
+    opencode_attach_url: str
+    opencode_timeout_seconds: int
     min_save_score: float
     max_message_chars: int
     database_path: Path
@@ -33,6 +37,10 @@ def load_settings() -> Settings:
     source_chats = _split_csv(os.getenv("SOURCE_CHATS", ""))
     destination_chat = os.getenv("DESTINATION_CHAT", "").strip()
     briefing_chat = os.getenv("BRIEFING_CHAT", "").strip() or destination_chat
+    llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+
+    if llm_provider not in {"ollama", "opencode"}:
+        raise RuntimeError("LLM_PROVIDER must be either 'ollama' or 'opencode'.")
 
     missing = []
     for key in ["TG_API_ID", "TG_API_HASH", "TG_PHONE", "SOURCE_CHATS", "DESTINATION_CHAT"]:
@@ -50,8 +58,12 @@ def load_settings() -> Settings:
         source_chats=source_chats,
         destination_chat=destination_chat,
         briefing_chat=briefing_chat,
+        llm_provider=llm_provider,
         ollama_url=os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/"),
         ollama_model=os.getenv("OLLAMA_MODEL", "llama3.1:8b").strip(),
+        opencode_model=os.getenv("OPENCODE_MODEL", "").strip(),
+        opencode_attach_url=os.getenv("OPENCODE_ATTACH_URL", "").strip(),
+        opencode_timeout_seconds=int(os.getenv("OPENCODE_TIMEOUT_SECONDS", "180")),
         min_save_score=float(os.getenv("MIN_SAVE_SCORE", "7.0")),
         max_message_chars=int(os.getenv("MAX_MESSAGE_CHARS", "5000")),
         database_path=Path(os.getenv("DATABASE_PATH", "data/signals.db")),
