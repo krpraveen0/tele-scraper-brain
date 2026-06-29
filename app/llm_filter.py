@@ -9,12 +9,18 @@ import requests
 from app.models import SignalAnalysis, parse_analysis
 
 DEFAULT_PROMPT_PATH = Path("prompts/classify_message.txt")
+MESSAGE_PLACEHOLDER = "{message_text}"
 
 
 def load_prompt_template(path: Path = DEFAULT_PROMPT_PATH) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8")
     return DEFAULT_PROMPT
+
+
+def render_prompt(template: str, message_text: str) -> str:
+    """Render the message placeholder without interpreting JSON braces in the prompt."""
+    return template.replace(MESSAGE_PLACEHOLDER, message_text)
 
 
 DEFAULT_PROMPT = """
@@ -67,7 +73,7 @@ class OllamaFilter:
         self.prompt_template = load_prompt_template(prompt_path)
 
     def analyze(self, message_text: str) -> SignalAnalysis:
-        prompt = self.prompt_template.format(message_text=message_text)
+        prompt = render_prompt(self.prompt_template, message_text)
         payload: dict[str, Any] = {
             "model": self.model,
             "prompt": prompt,
