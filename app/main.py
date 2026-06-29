@@ -7,7 +7,7 @@ from rich.console import Console
 
 from app.config import load_settings
 from app.daily_briefing import build_daily_briefing
-from app.llm_filter import OllamaFilter
+from app.llm_provider import create_analyzer
 from app.message_cleaner import clean_message
 from app.models import SignalAnalysis, TelegramSignal
 from app.rule_filter import should_send_to_llm
@@ -20,7 +20,7 @@ console = Console()
 async def run_monitor() -> None:
     settings = load_settings()
     store = SignalStore(settings.database_path)
-    llm = OllamaFilter(settings.ollama_url, settings.ollama_model)
+    analyzer = create_analyzer(settings)
     telegram = TelegramSignalClient(settings)
 
     async def handle_signal(raw_signal: TelegramSignal) -> SignalAnalysis | None:
@@ -45,8 +45,8 @@ async def run_monitor() -> None:
             console.print(f"[dim]Rule skipped:[/dim] {rule_decision.reason}")
             return analysis
 
-        console.print(f"[cyan]Analyzing:[/cyan] {signal.source_title}#{signal.message_id}")
-        analysis = llm.analyze(signal.message_text)
+        console.print(f"[cyan]Analyzing with {settings.llm_provider}:[/cyan] {signal.source_title}#{signal.message_id}")
+        analysis = analyzer.analyze(signal.message_text)
         should_save = analysis.is_valuable and analysis.score >= settings.min_save_score
         stored_id = store.save(signal, analysis, saved_to_telegram=False)
 
