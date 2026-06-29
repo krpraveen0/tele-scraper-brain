@@ -1,15 +1,15 @@
 # Praveen Signal OS
 
-A local-first personal intelligence system that monitors Telegram sources, filters noisy posts, scores useful signals with a local LLM, stores them in SQLite, and sends high-value summaries back to your private Telegram channels.
+A local-first personal intelligence system that monitors Telegram sources, filters noisy posts, scores useful signals with a local LLM/backend, stores them in SQLite, and sends high-value summaries back to your private Telegram channels.
 
-This MVP focuses on Telegram + Ollama + SQLite.
+This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the analysis backend.
 
 ## What it does
 
 - Monitors selected Telegram channels/groups using Telethon.
 - Cleans and deduplicates messages.
-- Applies a cheap rule-based pre-filter before using the LLM.
-- Uses Ollama/local LLM to classify, summarize, score, and recommend an action.
+- Applies a cheap rule-based pre-filter before using the LLM/backend.
+- Uses Ollama or OpenCode to classify, summarize, score, and recommend an action.
 - Stores every evaluated signal in SQLite.
 - Sends useful items to a private Telegram destination.
 - Can generate a daily briefing from saved signals.
@@ -35,6 +35,7 @@ tele-scraper-brain/
 │   ├── daily_briefing.py
 │   ├── dedupe.py
 │   ├── llm_filter.py
+│   ├── llm_provider.py
 │   ├── main.py
 │   ├── message_cleaner.py
 │   ├── models.py
@@ -55,7 +56,7 @@ tele-scraper-brain/
 
 - Python 3.10+
 - Telegram API credentials from https://my.telegram.org
-- Ollama running locally
+- Either Ollama or OpenCode installed locally
 - A private Telegram channel/group where the bot/user client can post saved signals
 
 ## Setup
@@ -69,11 +70,43 @@ cp .env.example .env
 
 Fill `.env` with your values.
 
-Start Ollama:
+## Option A: use Ollama
 
 ```bash
 ollama serve
 ollama pull llama3.1:8b
+```
+
+Set this in `.env`:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
+```
+
+## Option B: use OpenCode
+
+OpenCode supports non-interactive CLI usage with `opencode run "your prompt"`. The project uses that mode when `LLM_PROVIDER=opencode`.
+
+Set this in `.env`:
+
+```env
+LLM_PROVIDER=opencode
+OPENCODE_MODEL=
+OPENCODE_TIMEOUT_SECONDS=180
+```
+
+You can optionally start an OpenCode server to avoid repeated cold starts:
+
+```bash
+opencode serve
+```
+
+Then set:
+
+```env
+OPENCODE_ATTACH_URL=http://localhost:4096
 ```
 
 ## Run the monitor
@@ -112,7 +145,7 @@ A message is saved when:
 
 1. It passes basic noise filtering.
 2. It is not already stored.
-3. The local LLM returns `is_valuable=true`.
+3. The configured LLM/backend returns `is_valuable=true`.
 4. Its score is greater than or equal to `MIN_SAVE_SCORE`.
 
 Default threshold: `7.0`.
