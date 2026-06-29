@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+*.session
+*.session-journal
+
+# Runtime data
+/data/*.db
+/data/*.sqlite
+/data/*.sqlite3
+/logs/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
