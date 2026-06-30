@@ -133,6 +133,19 @@ class SignalStore:
             ).fetchall()
         return [self._row_to_signal(row) for row in rows]
 
+    def unsent_saved(self, limit: int = 20) -> list[StoredSignal]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM signals
+                WHERE is_valuable = 1 AND saved_to_telegram = 0
+                ORDER BY score DESC, created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_signal(row) for row in rows]
+
     def saved_since(self, iso_datetime: str, limit: int = 50) -> list[StoredSignal]:
         with self._connect() as conn:
             rows = conn.execute(

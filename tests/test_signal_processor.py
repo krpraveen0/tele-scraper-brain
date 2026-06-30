@@ -72,6 +72,8 @@ async def test_process_saves_high_value_signal_locally(settings, quiet_console) 
     assert result.analysis.score == 8.5
     assert analyzer.calls == 1
     assert len(list(store.iter_all())) == 1
+    assert len(store.unsent_saved()) == 1
+    assert len(store.recent_saved()) == 0
 
 
 @pytest.mark.asyncio
@@ -103,3 +105,19 @@ async def test_rule_skipped_message_is_stored_without_llm_call(settings, quiet_c
     rows = list(store.iter_all())
     assert len(rows) == 1
     assert rows[0].analysis.is_valuable is False
+
+
+def test_unsent_saved_excludes_sent_signals(settings) -> None:
+    store = SignalStore(settings.database_path)
+    signal = make_signal("Remote AI Engineer role with Python, RAG, LangGraph and tracing.")
+    analysis = SignalAnalysis(is_valuable=True, score=8.0, category="Career")
+
+    stored_id = store.save(signal, analysis, saved_to_telegram=False)
+
+    assert len(store.unsent_saved()) == 1
+    assert len(store.recent_saved()) == 0
+
+    store.mark_saved_to_telegram(stored_id)
+
+    assert len(store.unsent_saved()) == 0
+    assert len(store.recent_saved()) == 1

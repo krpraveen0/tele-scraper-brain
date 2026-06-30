@@ -13,7 +13,7 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 - Uses Ollama or OpenCode to classify, summarize, score, and recommend an action.
 - Stores every evaluated signal in SQLite.
 - Sends useful items to a private Telegram destination.
-- Can show recent saved signals and generate a daily briefing.
+- Can show sent saved signals, unsent saved signals, and generate a daily briefing.
 
 ## Core streams
 
@@ -129,13 +129,29 @@ The monitor processes only new messages. Use backfill to process recent historic
 python -m app.main backfill --limit 20
 ```
 
-By default, backfill stores useful signals locally but does not forward them to Telegram. To send saved signals to your destination channel during backfill:
+By default, backfill stores useful signals locally but does not forward them to Telegram.
+
+To review locally saved signals that have not yet been sent:
+
+```bash
+python -m app.main unsent --limit 20
+```
+
+To send those previously saved unsent signals to your destination channel:
+
+```bash
+python -m app.main send-unsent --limit 20
+```
+
+You can also send saved signals during a backfill:
 
 ```bash
 python -m app.main backfill --limit 20 --send
 ```
 
-## Review recent saved signals
+If you already ran backfill without `--send`, rerunning with `--send` will now also forward saved-but-unsent signals instead of only skipping duplicates.
+
+## Review recent sent saved signals
 
 ```bash
 python -m app.main recent
