@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -32,6 +33,11 @@ def settings(tmp_path: Path):
     )
 
 
+@pytest.fixture
+def quiet_console() -> Console:
+    return Console(file=StringIO(), force_terminal=False, width=120)
+
+
 def make_signal(text: str, message_id: int = 1) -> TelegramSignal:
     return TelegramSignal(
         source_id="source-1",
@@ -44,7 +50,7 @@ def make_signal(text: str, message_id: int = 1) -> TelegramSignal:
 
 
 @pytest.mark.asyncio
-async def test_process_saves_high_value_signal_locally(settings) -> None:
+async def test_process_saves_high_value_signal_locally(settings, quiet_console) -> None:
     store = SignalStore(settings.database_path)
     analyzer = StubAnalyzer(
         SignalAnalysis(
@@ -57,7 +63,7 @@ async def test_process_saves_high_value_signal_locally(settings) -> None:
             suggested_action="Apply",
         )
     )
-    processor = SignalProcessor(settings, store, analyzer, console=Console(file=None, quiet=True))
+    processor = SignalProcessor(settings, store, analyzer, console=quiet_console)
 
     result = await processor.process(make_signal("Remote AI Engineer role with Python, RAG, LangGraph and tracing."))
 
@@ -69,10 +75,10 @@ async def test_process_saves_high_value_signal_locally(settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_process_skips_duplicate_without_llm_call(settings) -> None:
+async def test_process_skips_duplicate_without_llm_call(settings, quiet_console) -> None:
     store = SignalStore(settings.database_path)
     analyzer = StubAnalyzer(SignalAnalysis(is_valuable=True, score=9.0, category="Career"))
-    processor = SignalProcessor(settings, store, analyzer, console=Console(file=None, quiet=True))
+    processor = SignalProcessor(settings, store, analyzer, console=quiet_console)
     signal = make_signal("Remote AI Engineer role with Python, RAG, LangGraph and tracing.")
 
     first = await processor.process(signal)
@@ -85,10 +91,10 @@ async def test_process_skips_duplicate_without_llm_call(settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rule_skipped_message_is_stored_without_llm_call(settings) -> None:
+async def test_rule_skipped_message_is_stored_without_llm_call(settings, quiet_console) -> None:
     store = SignalStore(settings.database_path)
     analyzer = StubAnalyzer(SignalAnalysis(is_valuable=True, score=9.0, category="Career"))
-    processor = SignalProcessor(settings, store, analyzer, console=Console(file=None, quiet=True))
+    processor = SignalProcessor(settings, store, analyzer, console=quiet_console)
 
     result = await processor.process(make_signal("good morning everyone"))
 
