@@ -10,7 +10,7 @@ from rich.table import Table
 from app.config import load_settings
 from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
-from app.models import StoredSignal, TelegramSignal
+from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredSignal, TelegramSignal
 from app.signal_processor import SignalProcessor
 from app.source_recommender import recommend_sources
 from app.storage import SignalStore
@@ -261,6 +261,56 @@ def run_recommend_sources(min_samples: int) -> None:
     console.print("[dim]Edit sources.yaml manually using these suggestions; this command does not modify your config.[/dim]")
 
 
+def run_feedback(signal_id: int, label: str, notes: str) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    feedback = store.add_feedback(signal_id=signal_id, label=label, notes=notes)
+    console.print(
+        f"[green]Feedback saved:[/green] signal_id={feedback.signal_id} | label={feedback.label} | feedback_id={feedback.id}"
+    )
+    if feedback.notes:
+        console.print(f"[dim]Notes:[/dim] {feedback.notes}")
+
+
+def run_feedback_summary() -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    rows = store.feedback_summary()
+
+    if not rows:
+        console.print("[yellow]No feedback labels found yet.[/yellow]")
+        console.print("[dim]Use `python -m app.main feedback --id <signal_id> --label useful` first.[/dim]")
+        return
+
+    table = Table(title="Feedback summary")
+    table.add_column("Label")
+    table.add_column("Count", justify="right")
+    table.add_column("Avg Score", justify="right")
+    table.add_column("Sent", justify="right")
+
+    for row in rows:
+        table.add_row(
+            str(row["label"]),
+            str(row["count"]),
+            f"{float(row['avg_score'] or 0.0):.1f}",
+            str(row["sent"] or 0),
+        )
+
+    console.print(table)
+
+
+def run_feedback_recent(limit: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    entries = store.recent_feedback(limit=limit)
+
+    if not entries:
+        console.print("[yellow]No feedback labels found yet.[/yellow]")
+        return
+
+    _print_feedback_table(f"Recent feedback ({len(entries)})", entries)
+
+
 def _source_suggestion(total: int, valuable: int, avg_score: float, signal_ratio: float) -> str:
     if total >= 20 and signal_ratio < 5:
         return "raise threshold / disable"
@@ -273,25 +323,42 @@ def _source_suggestion(total: int, valuable: int, avg_score: float, signal_ratio
 
 def _print_signal_table(title: str, signals: list[StoredSignal]) -> None:
     table = Table(title=title)
-    table.add_column("#", justify="right", style="dim")
+    table.add_column("ID", justify="right", style="dim")
     table.add_column("Score", justify="right")
     table.add_column("Category")
     table.add_column("Action")
     table.add_column("Source")
     table.add_column("Summary")
 
-    for index, signal in enumerate(signals, start=1):
+    for signal in signals:
         summary = signal.analysis.summary or signal.analysis.reason or signal.message_text[:120]
         if len(summary) > 120:
             summary = f"{summary[:117]}..."
         table.add_row(
-            str(index),
+            str(signal.id),
             f"{signal.analysis.score:.1f}",
             signal.analysis.category,
             signal.analysis.suggested_action,
             signal.source_title,
             summary,
         )
+
+    console.print(table)
+
+
+def _print_feedback_table(title: str, entries: list[FeedbackEntry]) -> None:
+    table = Table(title=title)
+    table.add_column("Feedback ID", justify="right", style="dim")
+    table.add_column("Signal ID", justify="right")
+    table.add_column("Label")
+    table.add_column("Notes")
+    table.add_column("Created")
+
+    for entry in entries:
+        notes = entry.notes
+        if len(notes) > 80:
+            notes = f"{notes[:77]}..."
+        table.add_row(str(entry.id), str(entry.signal_id), entry.label, notes, entry.created_at)
 
     console.print(table)
 
@@ -306,6 +373,16 @@ def parse_args() -> argparse.Namespace:
 
     recommend_parser = subparsers.add_parser("recommend-sources", help="Recommend source tuning actions from local stats")
     recommend_parser.add_argument("--min-samples", type=int, default=10, help="Minimum processed messages before tuning a source")
+
+    feedback_parser = subparsers.add_parser("feedback", help="Attach feedback label to a saved signal")
+    feedback_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
+    feedback_parser.add_argument("--label", required=True, choices=sorted(ALLOWED_FEEDBACK_LABELS), help="Feedback label")
+    feedback_parser.add_argument("--notes", default="", help="Optional feedback notes")
+
+    subparsers.add_parser("feedback-summary", help="Show feedback label counts")
+
+    feedback_recent_parser = subparsers.add_parser("feedback-recent", help="Show recent feedback labels")
+    feedback_recent_parser.add_argument("--limit", type=int, default=20, help="Number of recent feedback entries to show")
 
     backfill_parser = subparsers.add_parser("backfill", help="Process recent historical Telegram messages")
     backfill_parser.add_argument("--limit", type=int, default=20, help="Number of recent text messages per source")
@@ -345,6 +422,22 @@ def main() -> None:
         if args.min_samples < 1:
             raise RuntimeError("--min-samples must be at least 1")
         run_recommend_sources(min_samples=args.min_samples)
+        return
+
+    if args.command == "feedback":
+        if args.id < 1:
+            raise RuntimeError("--id must be at least 1")
+        run_feedback(signal_id=args.id, label=args.label, notes=args.notes)
+        return
+
+    if args.command == "feedback-summary":
+        run_feedback_summary()
+        return
+
+    if args.command == "feedback-recent":
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        run_feedback_recent(limit=args.limit)
         return
 
     if args.command == "backfill":
