@@ -14,9 +14,9 @@ def make_signal(message_id: int = 1) -> TelegramSignal:
         source_id="source-1",
         source_title="Test Source",
         message_id=message_id,
-        message_text="Remote AI Engineer role with Python, RAG, LangGraph and tracing.",
+        message_text=f"Remote AI Engineer role #{message_id} with Python, RAG, LangGraph and tracing.",
         message_date=datetime.now(timezone.utc),
-        permalink="https://t.me/test/1",
+        permalink=f"https://t.me/test/{message_id}",
     )
 
 
@@ -67,6 +67,8 @@ def test_feedback_summary_counts_labels(tmp_path: Path) -> None:
         SignalAnalysis(is_valuable=True, score=7.5, category="Tools"),
         saved_to_telegram=False,
     )
+
+    assert first_id != second_id
 
     store.add_feedback(signal_id=first_id, label="useful")
     store.add_feedback(signal_id=second_id, label="useful")
