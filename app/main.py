@@ -12,6 +12,7 @@ from app.asset_exporter import export_asset_to_markdown
 from app.asset_generator import ALLOWED_ASSET_TYPES, generate_asset
 from app.asset_rewriter import create_asset_rewriter
 from app.config import load_settings
+from app.daily_action_brief import build_daily_action_brief
 from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
 from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredAsset, StoredSignal, TelegramSignal
@@ -130,6 +131,22 @@ async def run_briefing(send: bool) -> None:
         await telegram.send_briefing(briefing)
         await telegram.disconnect()
         console.print("[green]Briefing sent to Telegram.[/green]")
+
+
+async def run_daily_action_brief(hours: int, limit: int, send: bool) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    brief = build_daily_action_brief(store, hours=hours, limit=limit)
+    console.print(brief)
+
+    if send:
+        telegram = TelegramSignalClient(settings)
+        await telegram.start()
+        try:
+            await telegram.send_briefing(brief)
+            console.print("[green]Daily action brief sent to Telegram.[/green]")
+        finally:
+            await telegram.disconnect()
 
 
 def run_recent(limit: int) -> None:
@@ -465,6 +482,11 @@ def parse_args() -> argparse.Namespace:
     recommend_parser = subparsers.add_parser("recommend-sources", help="Recommend source tuning actions from local stats")
     recommend_parser.add_argument("--min-samples", type=int, default=10, help="Minimum processed messages before tuning a source")
 
+    action_brief_parser = subparsers.add_parser("daily-action-brief", help="Generate a goal-focused daily action brief")
+    action_brief_parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours")
+    action_brief_parser.add_argument("--limit", type=int, default=60, help="Maximum saved signals to inspect")
+    action_brief_parser.add_argument("--send", action="store_true", help="Send daily action brief to Telegram")
+
     asset_parser = subparsers.add_parser("create-asset", help="Create a reusable asset draft from a saved signal")
     asset_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
     asset_parser.add_argument("--type", required=True, choices=sorted(ALLOWED_ASSET_TYPES), help="Asset type to generate")
@@ -525,6 +547,14 @@ def main() -> None:
         if args.min_samples < 1:
             raise RuntimeError("--min-samples must be at least 1")
         run_recommend_sources(min_samples=args.min_samples)
+        return
+
+    if args.command == "daily-action-brief":
+        if args.hours < 1:
+            raise RuntimeError("--hours must be at least 1")
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        asyncio.run(run_daily_action_brief(hours=args.hours, limit=args.limit, send=args.send))
         return
 
     if args.command == "create-asset":
