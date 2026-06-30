@@ -7,12 +7,13 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 ## What it does
 
 - Monitors selected Telegram channels/groups using Telethon.
+- Can backfill recent historical messages for immediate testing.
 - Cleans and deduplicates messages.
 - Applies a cheap rule-based pre-filter before using the LLM/backend.
 - Uses Ollama or OpenCode to classify, summarize, score, and recommend an action.
 - Stores every evaluated signal in SQLite.
 - Sends useful items to a private Telegram destination.
-- Can generate a daily briefing from saved signals.
+- Can show recent saved signals and generate a daily briefing.
 
 ## Core streams
 
@@ -40,15 +41,18 @@ tele-scraper-brain/
 │   ├── message_cleaner.py
 │   ├── models.py
 │   ├── rule_filter.py
+│   ├── signal_processor.py
 │   ├── storage.py
 │   └── telegram_client.py
 ├── data/
 │   └── .gitkeep
 ├── prompts/
 │   └── classify_message.txt
+├── tests/
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
+├── requirements-dev.txt
 └── README.md
 ```
 
@@ -74,7 +78,7 @@ Fill `.env` with your values.
 
 ```bash
 ollama serve
-ollama pull llama3.1:8b
+ollama pull qwen3:8b
 ```
 
 Set this in `.env`:
@@ -82,7 +86,7 @@ Set this in `.env`:
 ```env
 LLM_PROVIDER=ollama
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1:8b
+OLLAMA_MODEL=qwen3:8b
 ```
 
 ## Option B: use OpenCode
@@ -117,6 +121,32 @@ python -m app.main monitor
 
 The first run will ask you to sign in to Telegram. Telethon creates a local session file. Do not commit that session file.
 
+## Backfill recent messages
+
+The monitor processes only new messages. Use backfill to process recent historical messages from each configured source:
+
+```bash
+python -m app.main backfill --limit 20
+```
+
+By default, backfill stores useful signals locally but does not forward them to Telegram. To send saved signals to your destination channel during backfill:
+
+```bash
+python -m app.main backfill --limit 20 --send
+```
+
+## Review recent saved signals
+
+```bash
+python -m app.main recent
+```
+
+Or limit the output:
+
+```bash
+python -m app.main recent --limit 10
+```
+
 ## Generate daily briefing
 
 ```bash
@@ -128,6 +158,15 @@ Optionally send the briefing to Telegram:
 ```bash
 python -m app.main briefing --send
 ```
+
+## Run tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The current tests exercise the local processing pipeline and model normalization without requiring Telegram, Ollama, or OpenCode.
 
 ## Safety and privacy
 
