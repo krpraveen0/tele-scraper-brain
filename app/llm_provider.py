@@ -14,7 +14,7 @@ DEFAULT_PROMPT_PATH = Path("prompts/classify_message.txt")
 MESSAGE_PLACEHOLDER = "{message_text}"
 
 
-DEFAULT_PROMPT = """
+DEFAULT_PROMPT = '''
 You are Praveen Signal OS, a personal information filter for Praveen Kumar.
 
 Persona:
@@ -53,8 +53,10 @@ JSON schema:
 }
 
 Message:
-"""{message_text}"""
-""".strip()
+<<<MESSAGE>>>
+{message_text}
+<<<END_MESSAGE>>>
+'''.strip()
 
 
 class SignalAnalyzer(Protocol):
