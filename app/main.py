@@ -7,6 +7,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
+from app.asset_generator import ALLOWED_ASSET_TYPES, generate_asset
 from app.config import load_settings
 from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
@@ -261,6 +262,17 @@ def run_recommend_sources(min_samples: int) -> None:
     console.print("[dim]Edit sources.yaml manually using these suggestions; this command does not modify your config.[/dim]")
 
 
+def run_create_asset(signal_id: int, asset_type: str) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    signal = store.get_signal(signal_id)
+    if signal is None:
+        raise ValueError(f"Signal id {signal_id} does not exist.")
+
+    asset = generate_asset(signal, asset_type)
+    console.print(asset.render())
+
+
 def run_feedback(signal_id: int, label: str, notes: str) -> None:
     settings = load_settings()
     store = SignalStore(settings.database_path)
@@ -374,6 +386,10 @@ def parse_args() -> argparse.Namespace:
     recommend_parser = subparsers.add_parser("recommend-sources", help="Recommend source tuning actions from local stats")
     recommend_parser.add_argument("--min-samples", type=int, default=10, help="Minimum processed messages before tuning a source")
 
+    asset_parser = subparsers.add_parser("create-asset", help="Create a reusable asset draft from a saved signal")
+    asset_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
+    asset_parser.add_argument("--type", required=True, choices=sorted(ALLOWED_ASSET_TYPES), help="Asset type to generate")
+
     feedback_parser = subparsers.add_parser("feedback", help="Attach feedback label to a saved signal")
     feedback_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
     feedback_parser.add_argument("--label", required=True, choices=sorted(ALLOWED_FEEDBACK_LABELS), help="Feedback label")
@@ -422,6 +438,12 @@ def main() -> None:
         if args.min_samples < 1:
             raise RuntimeError("--min-samples must be at least 1")
         run_recommend_sources(min_samples=args.min_samples)
+        return
+
+    if args.command == "create-asset":
+        if args.id < 1:
+            raise RuntimeError("--id must be at least 1")
+        run_create_asset(signal_id=args.id, asset_type=args.type)
         return
 
     if args.command == "feedback":
