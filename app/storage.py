@@ -159,6 +159,24 @@ class SignalStore:
             ).fetchall()
         return [self._row_to_signal(row) for row in rows]
 
+    def source_stats(self) -> list[dict[str, object]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    source_title,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN is_valuable = 1 THEN 1 ELSE 0 END) AS valuable,
+                    SUM(CASE WHEN saved_to_telegram = 1 THEN 1 ELSE 0 END) AS sent,
+                    AVG(score) AS avg_score,
+                    MAX(score) AS max_score
+                FROM signals
+                GROUP BY source_title
+                ORDER BY valuable DESC, avg_score DESC, total DESC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def iter_all(self) -> Iterable[StoredSignal]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM signals ORDER BY created_at DESC").fetchall()
