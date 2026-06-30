@@ -60,7 +60,8 @@ class SignalProcessor:
             f"[cyan]Analyzing with {self.settings.llm_provider}:[/cyan] {signal.source_title}#{signal.message_id}"
         )
         analysis = self.analyzer.analyze(signal.message_text)
-        should_save = analysis.is_valuable and analysis.score >= self.settings.min_save_score
+        min_score = self.settings.min_save_score_for(signal)
+        should_save = analysis.is_valuable and analysis.score >= min_score
         stored_id = self.store.save(signal, analysis, saved_to_telegram=False)
 
         if should_save:
@@ -68,17 +69,18 @@ class SignalProcessor:
                 await send_saved_signal(signal, analysis)
                 if stored_id:
                     self.store.mark_saved_to_telegram(stored_id)
+                destination_key = self.settings.source_registry.destination_key_for(signal, analysis)
                 self.console.print(
-                    f"[green]Saved:[/green] {analysis.category} | score={analysis.score} | action={analysis.suggested_action}"
+                    f"[green]Saved:[/green] {analysis.category} | score={analysis.score} | min={min_score} | route={destination_key} | action={analysis.suggested_action}"
                 )
                 return ProcessedSignal(signal=signal, analysis=analysis, status="saved", saved_to_telegram=True)
 
             self.console.print(
-                f"[green]Saved locally:[/green] {analysis.category} | score={analysis.score} | action={analysis.suggested_action}"
+                f"[green]Saved locally:[/green] {analysis.category} | score={analysis.score} | min={min_score} | action={analysis.suggested_action}"
             )
             return ProcessedSignal(signal=signal, analysis=analysis, status="saved_local", saved_to_telegram=False)
 
-        self.console.print(f"[dim]Ignored:[/dim] score={analysis.score} reason={analysis.reason}")
+        self.console.print(f"[dim]Ignored:[/dim] score={analysis.score} min={min_score} reason={analysis.reason}")
         return ProcessedSignal(signal=signal, analysis=analysis, status="ignored")
 
     def _clean_signal(self, raw_signal: TelegramSignal) -> TelegramSignal:
@@ -90,4 +92,5 @@ class SignalProcessor:
             message_text=cleaned_text,
             message_date=raw_signal.message_date,
             permalink=raw_signal.permalink,
+            source_ref=raw_signal.source_ref,
         )
