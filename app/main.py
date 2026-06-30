@@ -12,6 +12,7 @@ from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
 from app.models import StoredSignal, TelegramSignal
 from app.signal_processor import SignalProcessor
+from app.source_recommender import recommend_sources
 from app.storage import SignalStore
 from app.telegram_client import TelegramSignalClient
 
@@ -222,6 +223,44 @@ def run_stats() -> None:
     console.print(f"[dim]Default minimum save score: {settings.min_save_score:.1f}[/dim]")
 
 
+def run_recommend_sources(min_samples: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    rows = store.source_stats()
+
+    if not rows:
+        console.print("[yellow]No stored signals yet. Run backfill or monitor first.[/yellow]")
+        return
+
+    recommendations = recommend_sources(rows, min_samples=min_samples)
+    table = Table(title="Source recommendations")
+    table.add_column("Source")
+    table.add_column("Action")
+    table.add_column("Total", justify="right")
+    table.add_column("Useful", justify="right")
+    table.add_column("Signal %", justify="right")
+    table.add_column("Avg", justify="right")
+    table.add_column("Suggested Min", justify="right")
+    table.add_column("Reason")
+
+    for item in recommendations:
+        suggested_min = "-" if item.suggested_min_save_score is None else f"{item.suggested_min_save_score:.1f}"
+        table.add_row(
+            item.source_title,
+            item.action,
+            str(item.total),
+            str(item.valuable),
+            f"{item.signal_ratio:.0f}%",
+            f"{item.avg_score:.1f}",
+            suggested_min,
+            item.reason,
+        )
+
+    console.print(table)
+    console.print(f"[dim]Minimum samples for recommendation: {min_samples}[/dim]")
+    console.print("[dim]Edit sources.yaml manually using these suggestions; this command does not modify your config.[/dim]")
+
+
 def _source_suggestion(total: int, valuable: int, avg_score: float, signal_ratio: float) -> str:
     if total >= 20 and signal_ratio < 5:
         return "raise threshold / disable"
@@ -265,6 +304,9 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("sources", help="Show configured sources and routing metadata")
     subparsers.add_parser("stats", help="Show source quality statistics")
 
+    recommend_parser = subparsers.add_parser("recommend-sources", help="Recommend source tuning actions from local stats")
+    recommend_parser.add_argument("--min-samples", type=int, default=10, help="Minimum processed messages before tuning a source")
+
     backfill_parser = subparsers.add_parser("backfill", help="Process recent historical Telegram messages")
     backfill_parser.add_argument("--limit", type=int, default=20, help="Number of recent text messages per source")
     backfill_parser.add_argument("--send", action="store_true", help="Forward saved signals to Telegram")
@@ -297,6 +339,12 @@ def main() -> None:
 
     if args.command == "stats":
         run_stats()
+        return
+
+    if args.command == "recommend-sources":
+        if args.min_samples < 1:
+            raise RuntimeError("--min-samples must be at least 1")
+        run_recommend_sources(min_samples=args.min_samples)
         return
 
     if args.command == "backfill":
