@@ -53,8 +53,9 @@ class TelegramSignalClient:
                 yield await self._message_to_signal(message)
 
     async def send_saved_signal(self, signal: TelegramSignal, analysis: SignalAnalysis) -> None:
+        destination_chat = self.settings.destination_for(signal, analysis)
         await self.client.send_message(
-            self.settings.destination_chat,
+            destination_chat,
             self.format_saved_signal(signal, analysis),
             link_preview=False,
         )
@@ -71,7 +72,9 @@ class TelegramSignalClient:
 
     async def _message_to_signal(self, message: Message) -> TelegramSignal:
         chat = await message.get_chat()
-        source_title = getattr(chat, "title", None) or getattr(chat, "username", None) or str(message.chat_id)
+        username = getattr(chat, "username", None)
+        source_ref = f"@{username}" if username else None
+        source_title = getattr(chat, "title", None) or username or str(message.chat_id)
         source_id = str(message.chat_id)
         message_date = message.date or datetime.now(timezone.utc)
         permalink = self._build_permalink(chat, message.id)
@@ -82,6 +85,7 @@ class TelegramSignalClient:
             message_text=message.raw_text or "",
             message_date=message_date,
             permalink=permalink,
+            source_ref=source_ref,
         )
 
     @staticmethod
