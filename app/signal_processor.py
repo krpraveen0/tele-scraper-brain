@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Awaitable, Callable
 
 from rich.console import Console
@@ -62,9 +62,9 @@ class SignalProcessor:
         analysis = self.analyzer.analyze(signal.message_text)
         min_score = self.settings.min_save_score_for(signal)
         should_save = analysis.is_valuable and analysis.score >= min_score
-        stored_id = self.store.save(signal, analysis, saved_to_telegram=False)
 
         if should_save:
+            stored_id = self.store.save(signal, analysis, saved_to_telegram=False)
             if send_saved_signal is not None:
                 await send_saved_signal(signal, analysis)
                 if stored_id:
@@ -80,6 +80,12 @@ class SignalProcessor:
             )
             return ProcessedSignal(signal=signal, analysis=analysis, status="saved_local", saved_to_telegram=False)
 
+        stored_analysis = replace(
+            analysis,
+            is_valuable=False,
+            reason=f"Below save threshold {min_score:.1f}. {analysis.reason}".strip(),
+        )
+        self.store.save(signal, stored_analysis, saved_to_telegram=False)
         self.console.print(f"[dim]Ignored:[/dim] score={analysis.score} min={min_score} reason={analysis.reason}")
         return ProcessedSignal(signal=signal, analysis=analysis, status="ignored")
 
