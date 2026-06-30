@@ -33,6 +33,22 @@ ALLOWED_ACTIONS = {
     "Ignore",
 }
 
+ALLOWED_FEEDBACK_LABELS = {
+    "useful",
+    "not_useful",
+    "linkedin_idea",
+    "medium_idea",
+    "teaching_example",
+    "career_opportunity",
+    "research_note",
+    "tool_to_try",
+    "english_practice",
+    "economy_signal",
+    "read_today",
+    "read_weekend",
+    "archive",
+}
+
 
 def _clamp_score(value: Any, default: float = 0.0) -> float:
     try:
@@ -50,6 +66,14 @@ def _normalize_category(value: Any) -> str:
 def _normalize_action(value: Any) -> str:
     cleaned = str(value or "Archive").strip()
     return cleaned if cleaned in ALLOWED_ACTIONS else "Archive"
+
+
+def normalize_feedback_label(value: str) -> str:
+    cleaned = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if cleaned not in ALLOWED_FEEDBACK_LABELS:
+        allowed = ", ".join(sorted(ALLOWED_FEEDBACK_LABELS))
+        raise ValueError(f"Unsupported feedback label '{value}'. Allowed labels: {allowed}")
+    return cleaned
 
 
 def _normalize_tags(value: Any) -> list[str]:
@@ -151,6 +175,15 @@ class StoredSignal:
     permalink: str | None
     analysis: SignalAnalysis
     saved_to_telegram: bool
+    created_at: str
+
+
+@dataclass(frozen=True)
+class FeedbackEntry:
+    id: int
+    signal_id: int
+    label: str
+    notes: str
     created_at: str
 
 

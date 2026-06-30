@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from app.dedupe import content_hash
-from app.models import SignalAnalysis, StoredSignal, TelegramSignal, utc_now_iso
+from app.models import FeedbackEntry, SignalAnalysis, StoredSignal, TelegramSignal, normalize_feedback_label, utc_now_iso
 
 
 SCHEMA = """
@@ -33,9 +33,21 @@ CREATE TABLE IF NOT EXISTS signals (
     UNIQUE(content_hash)
 );
 
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(signal_id) REFERENCES signals(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at);
 CREATE INDEX IF NOT EXISTS idx_signals_category_score ON signals(category, score);
 CREATE INDEX IF NOT EXISTS idx_signals_saved ON signals(saved_to_telegram);
+CREATE INDEX IF NOT EXISTS idx_feedback_signal_id ON feedback(signal_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_label ON feedback(label);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
 """
 
 
@@ -68,6 +80,7 @@ class SignalStore:
         return row is not None
 
     def save(self, signal: TelegramSignal, analysis: SignalAnalysis, saved_to_telegram: bool) -> int:
+        text_hash = content_hash(signal.message_text)
         with self._connect() as conn:
             cursor = conn.execute(
                 """
@@ -98,7 +111,7 @@ class SignalStore:
                     signal.message_text,
                     signal.message_date.isoformat(timespec="seconds"),
                     signal.permalink,
-                    content_hash(signal.message_text),
+                    text_hash,
                     int(analysis.is_valuable),
                     analysis.score,
                     analysis.category,
@@ -111,7 +124,18 @@ class SignalStore:
                     utc_now_iso(),
                 ),
             )
-            return int(cursor.lastrowid or 0)
+            if cursor.lastrowid:
+                return int(cursor.lastrowid)
+
+            existing = conn.execute(
+                """
+                SELECT id FROM signals
+                WHERE (source_id = ? AND message_id = ?) OR content_hash = ?
+                LIMIT 1
+                """,
+                (signal.source_id, signal.message_id, text_hash),
+            ).fetchone()
+            return int(existing["id"]) if existing else 0
 
     def mark_saved_to_telegram(self, signal_id: int) -> None:
         with self._connect() as conn:
@@ -119,6 +143,64 @@ class SignalStore:
                 "UPDATE signals SET saved_to_telegram = 1 WHERE id = ?",
                 (signal_id,),
             )
+
+    def add_feedback(self, signal_id: int, label: str, notes: str = "") -> FeedbackEntry:
+        normalized_label = normalize_feedback_label(label)
+        created_at = utc_now_iso()
+        with self._connect() as conn:
+            signal = conn.execute("SELECT 1 FROM signals WHERE id = ?", (signal_id,)).fetchone()
+            if signal is None:
+                raise ValueError(f"Signal id {signal_id} does not exist.")
+            cursor = conn.execute(
+                """
+                INSERT INTO feedback (signal_id, label, notes, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (signal_id, normalized_label, notes.strip(), created_at),
+            )
+            feedback_id = int(cursor.lastrowid)
+        return FeedbackEntry(id=feedback_id, signal_id=signal_id, label=normalized_label, notes=notes.strip(), created_at=created_at)
+
+    def feedback_for_signal(self, signal_id: int) -> list[FeedbackEntry]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM feedback
+                WHERE signal_id = ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (signal_id,),
+            ).fetchall()
+        return [self._row_to_feedback(row) for row in rows]
+
+    def recent_feedback(self, limit: int = 20) -> list[FeedbackEntry]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM feedback
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_feedback(row) for row in rows]
+
+    def feedback_summary(self) -> list[dict[str, object]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    f.label,
+                    COUNT(*) AS count,
+                    AVG(s.score) AS avg_score,
+                    SUM(CASE WHEN s.saved_to_telegram = 1 THEN 1 ELSE 0 END) AS sent
+                FROM feedback f
+                JOIN signals s ON s.id = f.signal_id
+                GROUP BY f.label
+                ORDER BY count DESC, f.label ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def recent_saved(self, limit: int = 20) -> list[StoredSignal]:
         with self._connect() as conn:
@@ -195,5 +277,15 @@ class SignalStore:
             permalink=row["permalink"],
             analysis=SignalAnalysis.from_json(row["analysis_json"]),
             saved_to_telegram=bool(row["saved_to_telegram"]),
+            created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_feedback(row: sqlite3.Row) -> FeedbackEntry:
+        return FeedbackEntry(
+            id=int(row["id"]),
+            signal_id=int(row["signal_id"]),
+            label=row["label"],
+            notes=row["notes"],
             created_at=row["created_at"],
         )
