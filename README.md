@@ -14,7 +14,8 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 - Supports source-aware thresholds through `sources.yaml`.
 - Routes saved signals by source destination or analysis category.
 - Stores every evaluated signal in SQLite.
-- Can show sent saved signals, unsent saved signals, source config, source stats, source recommendations, and daily briefings.
+- Supports feedback labels so your judgment can be captured over time.
+- Can show sent saved signals, unsent saved signals, source config, source stats, source recommendations, feedback summaries, and daily briefings.
 
 ## Core streams
 
@@ -145,6 +146,43 @@ python -m app.main recommend-sources
 ```
 
 The recommendation command does not edit `sources.yaml`. It tells you what to change manually, such as disabling a source, raising `min_save_score`, or keeping a high-value source.
+
+## Feedback labels
+
+Use feedback labels to capture your judgment after reviewing saved signals. This is the first step toward making the system Praveen-aware instead of only score-aware.
+
+First list saved signal IDs:
+
+```bash
+python -m app.main unsent --limit 20
+python -m app.main recent --limit 20
+```
+
+Then label useful or noisy signals:
+
+```bash
+python -m app.main feedback --id 123 --label useful
+python -m app.main feedback --id 124 --label not_useful --notes "Too generic"
+python -m app.main feedback --id 125 --label linkedin_idea
+python -m app.main feedback --id 126 --label teaching_example
+python -m app.main feedback --id 127 --label career_opportunity
+python -m app.main feedback --id 128 --label read_weekend
+```
+
+Allowed labels:
+
+```text
+archive, career_opportunity, economy_signal, english_practice, linkedin_idea, medium_idea, not_useful, read_today, read_weekend, research_note, teaching_example, tool_to_try, useful
+```
+
+Inspect feedback history:
+
+```bash
+python -m app.main feedback-summary
+python -m app.main feedback-recent --limit 20
+```
+
+The feedback commands do not change LLM prompts yet. They create a clean judgment dataset that later phases can use for prompt tuning, asset generation, and Telegram buttons.
 
 ## Destination routing
 
@@ -277,7 +315,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The current tests exercise the local processing pipeline, source registry, source recommendations, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
+The current tests exercise the local processing pipeline, source registry, source recommendations, feedback storage, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
 
 ## Safety and privacy
 
