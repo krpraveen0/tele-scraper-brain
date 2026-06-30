@@ -1,0 +1,204 @@
+# Curated public Telegram source candidates for Praveen Signal OS.
+#
+# Validation policy:
+# - No placeholder handles.
+# - Every handle below resolved to a public Telegram page or public Telegram contact page during web validation.
+# - This is a starter pack, not your private runtime config. Copy selected entries to local sources.yaml.
+# - Keep sources.yaml private; it is intentionally gitignored.
+#
+# Quality note:
+# Telegram has many clones, scam channels and stale channels. Start with 10-20 enabled sources,
+# run `python -m app.main stats`, then disable noisy sources.
+
+sources:
+  # -----------------------------
+  # AI / Telegram platform / bots
+  # -----------------------------
+  - name: Telegram News
+    handle: "@telegram"
+    enabled: true
+    trust_score: 9
+    category_hint: AI Engineering
+    min_save_score: 7.0
+    destination: ai_engineering
+    notes: "Official Telegram channel. Useful for bot, platform, privacy and AI feature updates. Validated via public t.me preview."
+
+  - name: Telegram Tips
+    handle: "@telegramtips"
+    enabled: true
+    trust_score: 9
+    category_hint: AI Engineering
+    min_save_score: 7.2
+    destination: ai_engineering
+    notes: "Official Telegram tips channel. Useful for new Telegram features, bots, automation and AI UX. Validated via public t.me preview."
+
+  - name: BotNews
+    handle: "@botnews"
+    enabled: true
+    trust_score: 9
+    category_hint: AI Engineering
+    min_save_score: 7.0
+    destination: ai_engineering
+    notes: "Official Telegram bot platform updates. High relevance for agent/bot workflows. Validated via public t.me preview."
+
+  - name: Pavel Durov
+    handle: "@durov"
+    enabled: true
+    trust_score: 8
+    category_hint: AI Engineering
+    min_save_score: 7.8
+    destination: ai_engineering
+    notes: "Telegram founder. Useful for platform strategy, AI, bots and ecosystem direction. Validated via public t.me preview."
+
+  - name: Telegram Contests
+    handle: "@contest"
+    enabled: true
+    trust_score: 8
+    category_hint: AI Engineering
+    min_save_score: 7.8
+    destination: ai_engineering
+    notes: "Official contests. Useful for engineering hiring signals and Telegram platform challenges. Validated via public t.me preview."
+
+  - name: Telegram Info English
+    handle: "@tginfoen"
+    enabled: true
+    trust_score: 7
+    category_hint: AI Engineering
+    min_save_score: 7.8
+    destination: ai_engineering
+    notes: "Telegram ecosystem/news in English. Keep only if stats show high signal. Validated via public t.me preview."
+
+  # -----------------------------
+  # Software engineering / security / tools
+  # -----------------------------
+  - name: GitHub Community
+    handle: "@github"
+    enabled: true
+    trust_score: 7
+    category_hint: Tools
+    min_save_score: 7.8
+    destination: tools
+    notes: "GitHub-related posts and repo discovery. Mixed quality; keep only if stats are good. Validated via public t.me preview."
+
+  - name: The Hacker News
+    handle: "@thehackernews"
+    enabled: true
+    trust_score: 9
+    category_hint: AI Engineering
+    min_save_score: 7.8
+    destination: ai_engineering
+    notes: "Official THN Telegram channel; cybersecurity, software supply chain, AI security. Validated via verified public t.me preview."
+
+  - name: TechCrunch
+    handle: "@TechCrunch"
+    enabled: true
+    trust_score: 6
+    category_hint: AI Engineering
+    min_save_score: 8.2
+    destination: ai_engineering
+    notes: "Startup/AI/product news. Telegram page resolves, but use stricter threshold because preview is limited."
+
+  # -----------------------------
+  # Global economy / business / macro
+  # -----------------------------
+  - name: Bloomberg
+    handle: "@Bloomberg"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.0
+    destination: global_economy
+    notes: "Global economy, markets and business. Validated via public t.me preview."
+
+  - name: CNBC
+    handle: "@CNBC"
+    enabled: true
+    trust_score: 6
+    category_hint: Global Economy
+    min_save_score: 8.5
+    destination: global_economy
+    notes: "Business/markets. Telegram page resolves; stricter threshold due limited preview and low subscriber count."
+
+  - name: Business Insider
+    handle: "@businessinsider"
+    enabled: true
+    trust_score: 7
+    category_hint: Global Economy
+    min_save_score: 8.2
+    destination: global_economy
+    notes: "Business, tech and economy. Validated via public t.me preview."
+
+  - name: The New York Times
+    handle: "@nytimes"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.5
+    destination: global_economy
+    notes: "Global news and policy context. Validated via public t.me preview."
+
+  - name: The Guardian
+    handle: "@guardian"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.5
+    destination: global_economy
+    notes: "Global affairs and economy context. Validated via public t.me preview."
+
+  - name: The Washington Post
+    handle: "@washingtonpost"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.5
+    destination: global_economy
+    notes: "Global policy and geopolitical context. Validated via public t.me preview."
+
+  - name: BBC Breaking
+    handle: "@BBCBreaking"
+    enabled: true
+    trust_score: 7
+    category_hint: Global Economy
+    min_save_score: 8.8
+    destination: global_economy
+    notes: "Breaking news only. Use high threshold to avoid too much non-actionable news. Validated via public t.me preview."
+
+  - name: CNN Breaking
+    handle: "@CNNBrk"
+    enabled: false
+    trust_score: 4
+    category_hint: Global Economy
+    min_save_score: 9.0
+    destination: global_economy
+    notes: "Resolved public page but appears stale/low signal in preview. Disabled by default."
+
+  - name: Al Jazeera
+    handle: "@aljazeera"
+    enabled: false
+    trust_score: 5
+    category_hint: Global Economy
+    min_save_score: 9.0
+    destination: global_economy
+    notes: "Resolved public page but mostly Arabic/video-heavy; disabled unless you want geopolitics coverage."
+
+  # -----------------------------
+  # India economy / markets / career context
+  # -----------------------------
+  - name: Moneycontrol
+    handle: "@moneycontrolcom"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.3
+    destination: global_economy
+    notes: "India markets, macro and business. Useful for economy briefing. Validated via public t.me preview."
+
+  - name: Mint Business News
+    handle: "@livemint"
+    enabled: true
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.3
+    destination: global_economy
+    notes: "India business and market news. Validated via public t.me preview."
