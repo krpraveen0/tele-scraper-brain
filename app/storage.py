@@ -106,7 +106,7 @@ class SignalStore:
                     analysis.summary,
                     json.dumps(analysis.tags),
                     analysis.suggested_action,
-                    analysis.model_dump_json(),
+                    analysis.to_json(),
                     int(saved_to_telegram),
                     utc_now_iso(),
                 ),
@@ -162,7 +162,7 @@ class SignalStore:
             message_text=row["message_text"],
             message_date=row["message_date"],
             permalink=row["permalink"],
-            analysis=SignalAnalysis.model_validate_json(row["analysis_json"]),
+            analysis=SignalAnalysis.from_json(row["analysis_json"]),
             saved_to_telegram=bool(row["saved_to_telegram"]),
             created_at=row["created_at"],
         )
