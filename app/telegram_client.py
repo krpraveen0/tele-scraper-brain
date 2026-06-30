@@ -7,7 +7,7 @@ from telethon import TelegramClient, events
 from telethon.tl.custom.message import Message
 
 from app.config import Settings
-from app.models import SignalAnalysis, TelegramSignal
+from app.models import SignalAnalysis, StoredAsset, TelegramSignal
 
 SignalHandler = Callable[[TelegramSignal], Awaitable[SignalAnalysis | None]]
 
@@ -57,6 +57,13 @@ class TelegramSignalClient:
         await self.client.send_message(
             destination_chat,
             self.format_saved_signal(signal, analysis),
+            link_preview=False,
+        )
+
+    async def send_asset(self, asset: StoredAsset) -> None:
+        await self.client.send_message(
+            self.settings.asset_chat,
+            self.format_asset(asset),
             link_preview=False,
         )
 
@@ -121,3 +128,17 @@ Tags: {tags}
 
 Original:
 {original}""".strip()
+
+    @staticmethod
+    def format_asset(asset: StoredAsset) -> str:
+        text = asset.render()
+        if len(text) > 3500:
+            text = f"{text[:3490]}\n..."
+        return f"""🧩 Signal OS Asset
+
+Asset ID: {asset.id}
+Signal ID: {asset.signal_id}
+Type: {asset.asset_type}
+Rewritten: {'yes' if asset.rewritten else 'no'}
+
+{text}""".strip()
