@@ -14,6 +14,7 @@ from app.asset_rewriter import create_asset_rewriter
 from app.config import load_settings
 from app.daily_action_brief import build_daily_action_brief
 from app.daily_briefing import build_daily_briefing
+from app.feedback_profile import build_feedback_profile
 from app.llm_provider import create_analyzer
 from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredAsset, StoredSignal, TelegramSignal
 from app.signal_processor import SignalProcessor
@@ -147,6 +148,13 @@ async def run_daily_action_brief(hours: int, limit: int, send: bool) -> None:
             console.print("[green]Daily action brief sent to Telegram.[/green]")
         finally:
             await telegram.disconnect()
+
+
+def run_feedback_profile(limit: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    profile = build_feedback_profile(store, limit=limit)
+    console.print(profile)
 
 
 def run_recent(limit: int) -> None:
@@ -482,6 +490,9 @@ def parse_args() -> argparse.Namespace:
     recommend_parser = subparsers.add_parser("recommend-sources", help="Recommend source tuning actions from local stats")
     recommend_parser.add_argument("--min-samples", type=int, default=10, help="Minimum processed messages before tuning a source")
 
+    profile_parser = subparsers.add_parser("feedback-profile", help="Generate a feedback intelligence profile")
+    profile_parser.add_argument("--limit", type=int, default=200, help="Maximum recent signals/assets to inspect")
+
     action_brief_parser = subparsers.add_parser("daily-action-brief", help="Generate a goal-focused daily action brief")
     action_brief_parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours")
     action_brief_parser.add_argument("--limit", type=int, default=60, help="Maximum saved signals to inspect")
@@ -534,21 +545,22 @@ def main() -> None:
     if args.command == "monitor":
         asyncio.run(run_monitor())
         return
-
     if args.command == "sources":
         run_sources()
         return
-
     if args.command == "stats":
         run_stats()
         return
-
     if args.command == "recommend-sources":
         if args.min_samples < 1:
             raise RuntimeError("--min-samples must be at least 1")
         run_recommend_sources(min_samples=args.min_samples)
         return
-
+    if args.command == "feedback-profile":
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        run_feedback_profile(limit=args.limit)
+        return
     if args.command == "daily-action-brief":
         if args.hours < 1:
             raise RuntimeError("--hours must be at least 1")
@@ -556,7 +568,6 @@ def main() -> None:
             raise RuntimeError("--limit must be at least 1")
         asyncio.run(run_daily_action_brief(hours=args.hours, limit=args.limit, send=args.send))
         return
-
     if args.command == "create-asset":
         if args.id < 1:
             raise RuntimeError("--id must be at least 1")
@@ -572,53 +583,44 @@ def main() -> None:
             )
         )
         return
-
     if args.command == "assets":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         run_assets(limit=args.limit)
         return
-
     if args.command == "feedback":
         if args.id < 1:
             raise RuntimeError("--id must be at least 1")
         run_feedback(signal_id=args.id, label=args.label, notes=args.notes)
         return
-
     if args.command == "feedback-summary":
         run_feedback_summary()
         return
-
     if args.command == "feedback-recent":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         run_feedback_recent(limit=args.limit)
         return
-
     if args.command == "backfill":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         asyncio.run(run_backfill(limit=args.limit, send=args.send))
         return
-
     if args.command == "recent":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         run_recent(limit=args.limit)
         return
-
     if args.command == "unsent":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         run_unsent(limit=args.limit)
         return
-
     if args.command == "send-unsent":
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         asyncio.run(send_unsent_saved_signals(limit=args.limit))
         return
-
     if args.command == "briefing":
         asyncio.run(run_briefing(send=args.send))
         return
