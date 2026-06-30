@@ -137,6 +137,11 @@ class SignalStore:
             ).fetchone()
             return int(existing["id"]) if existing else 0
 
+    def get_signal(self, signal_id: int) -> StoredSignal | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
+        return self._row_to_signal(row) if row else None
+
     def mark_saved_to_telegram(self, signal_id: int) -> None:
         with self._connect() as conn:
             conn.execute(
