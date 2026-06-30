@@ -14,7 +14,7 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 - Supports source-aware thresholds through `sources.yaml`.
 - Routes saved signals by source destination or analysis category.
 - Stores every evaluated signal in SQLite.
-- Can show sent saved signals, unsent saved signals, source config, source stats, and daily briefings.
+- Can show sent saved signals, unsent saved signals, source config, source stats, source recommendations, and daily briefings.
 
 ## Core streams
 
@@ -43,6 +43,7 @@ tele-scraper-brain/
 │   ├── models.py
 │   ├── rule_filter.py
 │   ├── signal_processor.py
+│   ├── source_recommender.py
 │   ├── sources.py
 │   ├── storage.py
 │   └── telegram_client.py
@@ -123,14 +124,27 @@ Inspect source quality from stored data:
 python -m app.main stats
 ```
 
+Generate deterministic tuning recommendations from local SQLite stats:
+
+```bash
+python -m app.main recommend-sources
+```
+
+Use a larger sample threshold when you want more conservative advice:
+
+```bash
+python -m app.main recommend-sources --min-samples 25
+```
+
 Recommended validation loop:
 
 ```bash
 python -m app.main backfill --limit 20
 python -m app.main stats
+python -m app.main recommend-sources
 ```
 
-Disable or raise thresholds for sources with low signal ratio.
+The recommendation command does not edit `sources.yaml`. It tells you what to change manually, such as disabling a source, raising `min_save_score`, or keeping a high-value source.
 
 ## Destination routing
 
@@ -263,7 +277,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The current tests exercise the local processing pipeline, source registry, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
+The current tests exercise the local processing pipeline, source registry, source recommendations, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
 
 ## Safety and privacy
 
