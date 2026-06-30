@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+import json
 from typing import Any
-
-from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 ALLOWED_CATEGORIES = {
@@ -35,47 +34,75 @@ ALLOWED_ACTIONS = {
 }
 
 
-class SignalAnalysis(BaseModel):
+def _clamp_score(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(0.0, min(10.0, number))
+
+
+def _normalize_category(value: Any) -> str:
+    cleaned = str(value or "Other").strip()
+    return cleaned if cleaned in ALLOWED_CATEGORIES else "Other"
+
+
+def _normalize_action(value: Any) -> str:
+    cleaned = str(value or "Archive").strip()
+    return cleaned if cleaned in ALLOWED_ACTIONS else "Archive"
+
+
+def _normalize_tags(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    tags: list[str] = []
+    for tag in value:
+        text = str(tag).strip().replace(" ", "")
+        if not text:
+            continue
+        if not text.startswith("#"):
+            text = f"#{text}"
+        tags.append(text.lower())
+    return tags[:8]
+
+
+@dataclass(frozen=True)
+class SignalAnalysis:
     is_valuable: bool = False
-    score: float = Field(default=0.0, ge=0.0, le=10.0)
+    score: float = 0.0
     category: str = "Other"
     reason: str = ""
     summary: str = ""
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     suggested_action: str = "Archive"
-    career_relevance: float = Field(default=0.0, ge=0.0, le=10.0)
-    ai_engineering_relevance: float = Field(default=0.0, ge=0.0, le=10.0)
-    teaching_usefulness: float = Field(default=0.0, ge=0.0, le=10.0)
-    content_potential: float = Field(default=0.0, ge=0.0, le=10.0)
-    english_usefulness: float = Field(default=0.0, ge=0.0, le=10.0)
-    research_depth: float = Field(default=0.0, ge=0.0, le=10.0)
-    urgency: float = Field(default=0.0, ge=0.0, le=10.0)
-    noise_risk: float = Field(default=0.0, ge=0.0, le=10.0)
+    career_relevance: float = 0.0
+    ai_engineering_relevance: float = 0.0
+    teaching_usefulness: float = 0.0
+    content_potential: float = 0.0
+    english_usefulness: float = 0.0
+    research_depth: float = 0.0
+    urgency: float = 0.0
+    noise_risk: float = 0.0
 
-    @field_validator("category")
     @classmethod
-    def normalize_category(cls, value: str) -> str:
-        cleaned = (value or "Other").strip()
-        return cleaned if cleaned in ALLOWED_CATEGORIES else "Other"
-
-    @field_validator("suggested_action")
-    @classmethod
-    def normalize_action(cls, value: str) -> str:
-        cleaned = (value or "Archive").strip()
-        return cleaned if cleaned in ALLOWED_ACTIONS else "Archive"
-
-    @field_validator("tags")
-    @classmethod
-    def normalize_tags(cls, value: list[str]) -> list[str]:
-        tags = []
-        for tag in value or []:
-            text = str(tag).strip().replace(" ", "")
-            if not text:
-                continue
-            if not text.startswith("#"):
-                text = f"#{text}"
-            tags.append(text.lower())
-        return tags[:8]
+    def from_payload(cls, payload: dict[str, Any]) -> "SignalAnalysis":
+        return cls(
+            is_valuable=bool(payload.get("is_valuable", False)),
+            score=_clamp_score(payload.get("score")),
+            category=_normalize_category(payload.get("category")),
+            reason=str(payload.get("reason", "") or "").strip(),
+            summary=str(payload.get("summary", "") or "").strip(),
+            tags=_normalize_tags(payload.get("tags", [])),
+            suggested_action=_normalize_action(payload.get("suggested_action")),
+            career_relevance=_clamp_score(payload.get("career_relevance")),
+            ai_engineering_relevance=_clamp_score(payload.get("ai_engineering_relevance")),
+            teaching_usefulness=_clamp_score(payload.get("teaching_usefulness")),
+            content_potential=_clamp_score(payload.get("content_potential")),
+            english_usefulness=_clamp_score(payload.get("english_usefulness")),
+            research_depth=_clamp_score(payload.get("research_depth")),
+            urgency=_clamp_score(payload.get("urgency")),
+            noise_risk=_clamp_score(payload.get("noise_risk")),
+        )
 
     @classmethod
     def safe_default(cls, reason: str) -> "SignalAnalysis":
@@ -89,6 +116,13 @@ class SignalAnalysis(BaseModel):
             suggested_action="Archive",
             noise_risk=10.0,
         )
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, value: str) -> "SignalAnalysis":
+        return cls.from_payload(json.loads(value))
 
 
 @dataclass(frozen=True)
@@ -125,6 +159,6 @@ def utc_now_iso() -> str:
 
 def parse_analysis(payload: dict[str, Any]) -> SignalAnalysis:
     try:
-        return SignalAnalysis.model_validate(payload)
-    except ValidationError as exc:
-        return SignalAnalysis.safe_default(f"Invalid LLM JSON schema: {exc.errors()[:2]}")
+        return SignalAnalysis.from_payload(payload)
+    except Exception as exc:  # noqa: BLE001 - keep pipeline resilient to malformed LLM output.
+        return SignalAnalysis.safe_default(f"Invalid LLM JSON schema: {exc}")
