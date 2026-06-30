@@ -133,6 +133,7 @@ class TelegramSignal:
     message_text: str
     message_date: datetime
     permalink: str | None = None
+    source_ref: str | None = None
 
     @property
     def dedupe_key(self) -> str:
