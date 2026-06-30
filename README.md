@@ -15,7 +15,8 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 - Routes saved signals by source destination or analysis category.
 - Stores every evaluated signal in SQLite.
 - Supports feedback labels so your judgment can be captured over time.
-- Can show sent saved signals, unsent saved signals, source config, source stats, source recommendations, feedback summaries, and daily briefings.
+- Generates reusable asset drafts from saved signals.
+- Can show sent saved signals, unsent saved signals, source config, source stats, source recommendations, feedback summaries, asset drafts, and daily briefings.
 
 ## Core streams
 
@@ -34,6 +35,7 @@ The system is designed around your personal goals:
 tele-scraper-brain/
 ├── app/
 │   ├── __init__.py
+│   ├── asset_generator.py
 │   ├── config.py
 │   ├── daily_briefing.py
 │   ├── dedupe.py
@@ -184,6 +186,45 @@ python -m app.main feedback-recent --limit 20
 
 The feedback commands do not change LLM prompts yet. They create a clean judgment dataset that later phases can use for prompt tuning, asset generation, and Telegram buttons.
 
+## Asset generation
+
+Use asset generation to turn one saved signal into a reusable draft for your real goals: LinkedIn, Medium, teaching, career prep, English practice, research, or tool review.
+
+First list signal IDs:
+
+```bash
+python -m app.main unsent --limit 20
+python -m app.main recent --limit 20
+```
+
+Then create an asset:
+
+```bash
+python -m app.main create-asset --id 123 --type linkedin
+python -m app.main create-asset --id 123 --type medium_outline
+python -m app.main create-asset --id 123 --type teaching_example
+python -m app.main create-asset --id 123 --type career_note
+python -m app.main create-asset --id 123 --type english_practice
+python -m app.main create-asset --id 123 --type research_note
+python -m app.main create-asset --id 123 --type tool_review
+```
+
+Supported asset types:
+
+```text
+career_note, english_practice, linkedin, medium_outline, research_note, teaching_example, tool_review
+```
+
+Phase 7 asset generation is deterministic and print-only. It does not call the LLM and does not save generated assets yet. This keeps the first version fast, testable, and safe. Later phases can add LLM rewriting, Markdown export, SQLite asset history, and sending generated assets to Telegram.
+
+Recommended signal-to-asset workflow:
+
+```bash
+python -m app.main unsent --limit 20
+python -m app.main feedback --id 123 --label linkedin_idea
+python -m app.main create-asset --id 123 --type linkedin
+```
+
 ## Destination routing
 
 Saved signals are routed by source destination first. If a source uses `destination: default`, routing falls back to the analysis category.
@@ -315,7 +356,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The current tests exercise the local processing pipeline, source registry, source recommendations, feedback storage, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
+The current tests exercise the local processing pipeline, source registry, source recommendations, feedback storage, asset generation, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
 
 ## Safety and privacy
 
