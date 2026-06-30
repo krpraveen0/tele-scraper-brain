@@ -3,15 +3,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
+from app.asset_exporter import export_asset_to_markdown
 from app.asset_generator import ALLOWED_ASSET_TYPES, generate_asset
+from app.asset_rewriter import create_asset_rewriter
 from app.config import load_settings
 from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
-from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredSignal, TelegramSignal
+from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredAsset, StoredSignal, TelegramSignal
 from app.signal_processor import SignalProcessor
 from app.source_recommender import recommend_sources
 from app.storage import SignalStore
@@ -262,7 +265,15 @@ def run_recommend_sources(min_samples: int) -> None:
     console.print("[dim]Edit sources.yaml manually using these suggestions; this command does not modify your config.[/dim]")
 
 
-def run_create_asset(signal_id: int, asset_type: str) -> None:
+async def run_create_asset(
+    signal_id: int,
+    asset_type: str,
+    rewrite: bool,
+    save: bool,
+    export: bool,
+    export_dir: str | None,
+    send: bool,
+) -> None:
     settings = load_settings()
     store = SignalStore(settings.database_path)
     signal = store.get_signal(signal_id)
@@ -270,7 +281,51 @@ def run_create_asset(signal_id: int, asset_type: str) -> None:
         raise ValueError(f"Signal id {signal_id} does not exist.")
 
     asset = generate_asset(signal, asset_type)
+    rewritten = False
+    if rewrite:
+        rewriter = create_asset_rewriter(settings)
+        asset = rewriter.rewrite(signal, asset)
+        rewritten = True
+
+    stored_asset = None
+    should_save = save or export or send
+    if should_save:
+        stored_asset = store.save_asset(asset, rewritten=rewritten)
+        console.print(f"[green]Asset saved:[/green] asset_id={stored_asset.id} | signal_id={stored_asset.signal_id} | type={stored_asset.asset_type}")
+
+    if export:
+        assert stored_asset is not None
+        target_dir = Path(export_dir) if export_dir else settings.asset_export_dir
+        path = export_asset_to_markdown(stored_asset, target_dir)
+        store.mark_asset_exported(stored_asset.id, path)
+        stored_asset = store.get_asset(stored_asset.id) or stored_asset
+        console.print(f"[green]Asset exported:[/green] {path}")
+
+    if send:
+        assert stored_asset is not None
+        telegram = TelegramSignalClient(settings)
+        await telegram.start()
+        try:
+            await telegram.send_asset(stored_asset)
+            store.mark_asset_sent(stored_asset.id)
+            console.print(f"[green]Asset sent to Telegram:[/green] asset_id={stored_asset.id} chat={settings.asset_chat}")
+        finally:
+            await telegram.disconnect()
+
     console.print(asset.render())
+
+
+def run_assets(limit: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    assets = store.recent_assets(limit=limit)
+
+    if not assets:
+        console.print("[yellow]No generated assets found yet.[/yellow]")
+        console.print("[dim]Use `python -m app.main create-asset --id <signal_id> --type linkedin --save` first.[/dim]")
+        return
+
+    _print_asset_table(f"Recent assets ({len(assets)})", assets)
 
 
 def run_feedback(signal_id: int, label: str, notes: str) -> None:
@@ -375,6 +430,30 @@ def _print_feedback_table(title: str, entries: list[FeedbackEntry]) -> None:
     console.print(table)
 
 
+def _print_asset_table(title: str, assets: list[StoredAsset]) -> None:
+    table = Table(title=title)
+    table.add_column("Asset ID", justify="right", style="dim")
+    table.add_column("Signal ID", justify="right")
+    table.add_column("Type")
+    table.add_column("Rewritten")
+    table.add_column("Exported")
+    table.add_column("Sent")
+    table.add_column("Title")
+
+    for asset in assets:
+        table.add_row(
+            str(asset.id),
+            str(asset.signal_id),
+            asset.asset_type,
+            "yes" if asset.rewritten else "no",
+            asset.exported_path or "-",
+            "yes" if asset.sent_to_telegram else "no",
+            asset.title,
+        )
+
+    console.print(table)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Praveen Signal OS")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -389,6 +468,14 @@ def parse_args() -> argparse.Namespace:
     asset_parser = subparsers.add_parser("create-asset", help="Create a reusable asset draft from a saved signal")
     asset_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
     asset_parser.add_argument("--type", required=True, choices=sorted(ALLOWED_ASSET_TYPES), help="Asset type to generate")
+    asset_parser.add_argument("--rewrite", action="store_true", help="Rewrite the generated asset with the configured LLM backend")
+    asset_parser.add_argument("--save", action="store_true", help="Save the generated asset to SQLite history")
+    asset_parser.add_argument("--export", action="store_true", help="Export the generated asset as Markdown")
+    asset_parser.add_argument("--export-dir", default=None, help="Markdown export directory. Defaults to ASSET_EXPORT_DIR")
+    asset_parser.add_argument("--send", action="store_true", help="Send the generated asset to Telegram")
+
+    assets_parser = subparsers.add_parser("assets", help="Show recent generated assets")
+    assets_parser.add_argument("--limit", type=int, default=20, help="Number of assets to show")
 
     feedback_parser = subparsers.add_parser("feedback", help="Attach feedback label to a saved signal")
     feedback_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
@@ -443,7 +530,23 @@ def main() -> None:
     if args.command == "create-asset":
         if args.id < 1:
             raise RuntimeError("--id must be at least 1")
-        run_create_asset(signal_id=args.id, asset_type=args.type)
+        asyncio.run(
+            run_create_asset(
+                signal_id=args.id,
+                asset_type=args.type,
+                rewrite=args.rewrite,
+                save=args.save,
+                export=args.export,
+                export_dir=args.export_dir,
+                send=args.send,
+            )
+        )
+        return
+
+    if args.command == "assets":
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        run_assets(limit=args.limit)
         return
 
     if args.command == "feedback":
