@@ -14,8 +14,9 @@ htmlcov/
 venv/
 env/
 
-# Environment and secrets
+# Environment and local config
 .env
+sources.yaml
 *.session
 *.session-journal
 

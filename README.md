@@ -11,9 +11,10 @@ This MVP focuses on Telegram + SQLite with either Ollama or OpenCode as the anal
 - Cleans and deduplicates messages.
 - Applies a cheap rule-based pre-filter before using the LLM/backend.
 - Uses Ollama or OpenCode to classify, summarize, score, and recommend an action.
+- Supports source-aware thresholds through `sources.yaml`.
+- Routes saved signals by source destination or analysis category.
 - Stores every evaluated signal in SQLite.
-- Sends useful items to a private Telegram destination.
-- Can show sent saved signals, unsent saved signals, and generate a daily briefing.
+- Can show sent saved signals, unsent saved signals, source config, source stats, and daily briefings.
 
 ## Core streams
 
@@ -42,6 +43,7 @@ tele-scraper-brain/
 │   ├── models.py
 │   ├── rule_filter.py
 │   ├── signal_processor.py
+│   ├── sources.py
 │   ├── storage.py
 │   └── telegram_client.py
 ├── data/
@@ -49,6 +51,7 @@ tele-scraper-brain/
 ├── prompts/
 │   └── classify_message.txt
 ├── tests/
+├── sources.example.yaml
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
@@ -73,6 +76,64 @@ cp .env.example .env
 ```
 
 Fill `.env` with your values.
+
+## Source intelligence
+
+Use `sources.yaml` to control source quality, category hints, thresholds, and routing.
+
+```bash
+cp sources.example.yaml sources.yaml
+```
+
+Example source entry:
+
+```yaml
+sources:
+  - name: AI with Papers
+    handle: "@ai_papers"
+    enabled: true
+    trust_score: 9
+    category_hint: Research
+    min_save_score: 7.0
+    destination: research
+```
+
+When `sources.yaml` exists, it becomes the preferred source list. If it does not exist, the app falls back to legacy `SOURCE_CHATS` from `.env`.
+
+Inspect configured sources:
+
+```bash
+python -m app.main sources
+```
+
+Inspect source quality from stored data:
+
+```bash
+python -m app.main stats
+```
+
+## Destination routing
+
+Saved signals are routed by source destination first. If a source uses `destination: default`, routing falls back to the analysis category.
+
+Supported destination keys:
+
+```text
+default, career, ai_engineering, research, teaching, content, tools, english, global_economy, other
+```
+
+Configure category destinations in `.env`:
+
+```env
+DESTINATION_CHAT=@praveen_signal_os
+DEST_CAREER_CHAT=@praveen_career_radar
+DEST_RESEARCH_CHAT=@praveen_research_vault
+DEST_TEACHING_CHAT=@praveen_teaching_vault
+DEST_CONTENT_CHAT=@praveen_content_ideas
+DEST_TOOLS_CHAT=@praveen_tools_to_try
+```
+
+Empty destination values fall back to `DESTINATION_CHAT`.
 
 ## Option A: use Ollama
 
@@ -182,7 +243,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The current tests exercise the local processing pipeline and model normalization without requiring Telegram, Ollama, or OpenCode.
+The current tests exercise the local processing pipeline, source registry, storage, and model normalization without requiring Telegram, Ollama, or OpenCode.
 
 ## Safety and privacy
 
@@ -201,6 +262,6 @@ A message is saved when:
 1. It passes basic noise filtering.
 2. It is not already stored.
 3. The configured LLM/backend returns `is_valuable=true`.
-4. Its score is greater than or equal to `MIN_SAVE_SCORE`.
+4. Its score is greater than or equal to the source-specific `min_save_score`, or global `MIN_SAVE_SCORE` if the source has no override.
 
 Default threshold: `7.0`.

@@ -1,0 +1,48 @@
+# Copy this file to sources.yaml and customize it.
+# When sources.yaml exists, it becomes the preferred source list over SOURCE_CHATS.
+
+sources:
+  - name: Coding Interview Resources
+    handle: "@coding_interview_resources"
+    enabled: true
+    trust_score: 5
+    category_hint: Career
+    min_save_score: 8.0
+    destination: career
+    notes: "Useful only when posts contain concrete jobs, interview patterns, or high-signal prep material."
+
+  - name: GitHub repos
+    handle: "@github_repos"
+    enabled: true
+    trust_score: 8
+    category_hint: Tools
+    min_save_score: 7.5
+    destination: tools
+    notes: "Route practical repos and tools separately from generic career signals."
+
+  - name: AI with Papers
+    handle: "@ai_papers"
+    enabled: true
+    trust_score: 9
+    category_hint: Research
+    min_save_score: 7.0
+    destination: research
+    notes: "High-value research source; save papers that connect to agentic AI, RAG, evals, memory, or production AI."
+
+  - name: Data Science
+    handle: "@data_science_channel"
+    enabled: true
+    trust_score: 6
+    category_hint: Teaching
+    min_save_score: 7.5
+    destination: teaching
+    notes: "Good when it gives usable examples for training sessions."
+
+  - name: Noisy Free Courses
+    handle: "@free_courses_channel"
+    enabled: false
+    trust_score: 2
+    category_hint: Other
+    min_save_score: 9.0
+    destination: default
+    notes: "Disabled until proven useful."

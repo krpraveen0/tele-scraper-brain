@@ -65,8 +65,9 @@ async def send_unsent_saved_signals(limit: int) -> int:
             signal = stored_to_telegram_signal(stored)
             await telegram.send_saved_signal(signal, stored.analysis)
             store.mark_saved_to_telegram(stored.id)
+            destination_key = settings.source_registry.destination_key_for(signal, stored.analysis)
             console.print(
-                f"[green]Sent:[/green] {stored.analysis.category} | score={stored.analysis.score} | source={stored.source_title}"
+                f"[green]Sent:[/green] {stored.analysis.category} | score={stored.analysis.score} | route={destination_key} | source={stored.source_title}"
             )
     finally:
         await telegram.disconnect()
@@ -100,8 +101,6 @@ async def run_backfill(limit: int, send: bool) -> None:
 
     sent_unsent = 0
     if send:
-        # This handles the common flow: first backfill without --send, inspect locally,
-        # then rerun with --send. The rerun sees duplicates, so we forward saved-but-unsent rows here.
         sent_unsent = await send_unsent_saved_signals(limit=limit * max(1, len(settings.source_chats)))
 
     console.print()
@@ -138,28 +137,7 @@ def run_recent(limit: int) -> None:
         console.print("[dim]If you ran backfill without --send, use `python -m app.main unsent` to review local saved items.[/dim]")
         return
 
-    table = Table(title=f"Recent saved signals ({len(signals)})")
-    table.add_column("#", justify="right", style="dim")
-    table.add_column("Score", justify="right")
-    table.add_column("Category")
-    table.add_column("Action")
-    table.add_column("Source")
-    table.add_column("Summary")
-
-    for index, signal in enumerate(signals, start=1):
-        summary = signal.analysis.summary or signal.analysis.reason or signal.message_text[:120]
-        if len(summary) > 120:
-            summary = f"{summary[:117]}..."
-        table.add_row(
-            str(index),
-            f"{signal.analysis.score:.1f}",
-            signal.analysis.category,
-            signal.analysis.suggested_action,
-            signal.source_title,
-            summary,
-        )
-
-    console.print(table)
+    _print_signal_table(f"Recent saved signals ({len(signals)})", signals)
 
 
 def run_unsent(limit: int) -> None:
@@ -171,7 +149,91 @@ def run_unsent(limit: int) -> None:
         console.print("[yellow]No unsent saved signals found.[/yellow]")
         return
 
-    table = Table(title=f"Unsent saved signals ({len(signals)})")
+    _print_signal_table(f"Unsent saved signals ({len(signals)})", signals)
+
+
+def run_sources() -> None:
+    settings = load_settings()
+    sources = settings.source_registry.sources
+
+    table = Table(title=f"Configured sources from {settings.sources_config_path}")
+    table.add_column("Enabled")
+    table.add_column("Name")
+    table.add_column("Handle")
+    table.add_column("Trust", justify="right")
+    table.add_column("Hint")
+    table.add_column("Min", justify="right")
+    table.add_column("Route")
+
+    for source in sources:
+        table.add_row(
+            "yes" if source.enabled else "no",
+            source.name,
+            source.handle,
+            f"{source.trust_score:.1f}",
+            source.category_hint,
+            "default" if source.min_save_score is None else f"{source.min_save_score:.1f}",
+            source.destination,
+        )
+
+    console.print(table)
+    console.print(f"[dim]Enabled Telegram inputs: {', '.join(settings.source_chats)}[/dim]")
+
+
+def run_stats() -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    rows = store.source_stats()
+
+    if not rows:
+        console.print("[yellow]No stored signals yet. Run backfill or monitor first.[/yellow]")
+        return
+
+    table = Table(title="Source quality report")
+    table.add_column("Source")
+    table.add_column("Total", justify="right")
+    table.add_column("Useful", justify="right")
+    table.add_column("Sent", justify="right")
+    table.add_column("Avg", justify="right")
+    table.add_column("Max", justify="right")
+    table.add_column("Signal %", justify="right")
+    table.add_column("Suggestion")
+
+    for row in rows:
+        total = int(row["total"] or 0)
+        valuable = int(row["valuable"] or 0)
+        sent = int(row["sent"] or 0)
+        avg_score = float(row["avg_score"] or 0.0)
+        max_score = float(row["max_score"] or 0.0)
+        signal_ratio = (valuable / total * 100.0) if total else 0.0
+        suggestion = _source_suggestion(total, valuable, avg_score, signal_ratio)
+        table.add_row(
+            str(row["source_title"]),
+            str(total),
+            str(valuable),
+            str(sent),
+            f"{avg_score:.1f}",
+            f"{max_score:.1f}",
+            f"{signal_ratio:.0f}%",
+            suggestion,
+        )
+
+    console.print(table)
+    console.print(f"[dim]Default minimum save score: {settings.min_save_score:.1f}[/dim]")
+
+
+def _source_suggestion(total: int, valuable: int, avg_score: float, signal_ratio: float) -> str:
+    if total >= 20 and signal_ratio < 5:
+        return "raise threshold / disable"
+    if total >= 10 and signal_ratio > 40 and avg_score >= 6.5:
+        return "high-value source"
+    if valuable == 0:
+        return "watch"
+    return "keep testing"
+
+
+def _print_signal_table(title: str, signals: list[StoredSignal]) -> None:
+    table = Table(title=title)
     table.add_column("#", justify="right", style="dim")
     table.add_column("Score", justify="right")
     table.add_column("Category")
@@ -200,6 +262,8 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("monitor", help="Start Telegram monitoring")
+    subparsers.add_parser("sources", help="Show configured sources and routing metadata")
+    subparsers.add_parser("stats", help="Show source quality statistics")
 
     backfill_parser = subparsers.add_parser("backfill", help="Process recent historical Telegram messages")
     backfill_parser.add_argument("--limit", type=int, default=20, help="Number of recent text messages per source")
@@ -225,6 +289,14 @@ def main() -> None:
 
     if args.command == "monitor":
         asyncio.run(run_monitor())
+        return
+
+    if args.command == "sources":
+        run_sources()
+        return
+
+    if args.command == "stats":
+        run_stats()
         return
 
     if args.command == "backfill":
