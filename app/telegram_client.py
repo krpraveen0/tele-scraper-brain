@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import AsyncIterator, Awaitable, Callable
 
 from telethon import TelegramClient, events
 from telethon.tl.custom.message import Message
@@ -27,12 +27,30 @@ class TelegramSignalClient:
     async def run_monitor(self, handler: SignalHandler) -> None:
         @self.client.on(events.NewMessage(chats=self.settings.source_chats))
         async def on_message(event: events.NewMessage.Event) -> None:
-            signal = await self._event_to_signal(event.message)
+            signal = await self._message_to_signal(event.message)
             await handler(signal)
 
         await self.start()
         print("Telegram monitor started. Press Ctrl+C to stop.")
         await self.client.run_until_disconnected()
+
+    async def iter_recent_signals(self, limit_per_source: int) -> AsyncIterator[TelegramSignal]:
+        """Yield recent historical messages from each configured source.
+
+        Messages are yielded oldest-to-newest within each source so backfill processing
+        behaves closer to live monitoring and preserves chronological context in logs.
+        """
+        await self.start()
+
+        for source in self.settings.source_chats:
+            messages: list[Message] = []
+            async for message in self.client.iter_messages(source, limit=limit_per_source):
+                if not message.raw_text:
+                    continue
+                messages.append(message)
+
+            for message in reversed(messages):
+                yield await self._message_to_signal(message)
 
     async def send_saved_signal(self, signal: TelegramSignal, analysis: SignalAnalysis) -> None:
         await self.client.send_message(
@@ -48,7 +66,10 @@ class TelegramSignalClient:
             link_preview=False,
         )
 
-    async def _event_to_signal(self, message: Message) -> TelegramSignal:
+    async def disconnect(self) -> None:
+        await self.client.disconnect()
+
+    async def _message_to_signal(self, message: Message) -> TelegramSignal:
         chat = await message.get_chat()
         source_title = getattr(chat, "title", None) or getattr(chat, "username", None) or str(message.chat_id)
         source_id = str(message.chat_id)

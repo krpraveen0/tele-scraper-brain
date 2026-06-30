@@ -4,13 +4,12 @@ import argparse
 import asyncio
 
 from rich.console import Console
+from rich.table import Table
 
 from app.config import load_settings
 from app.daily_briefing import build_daily_briefing
 from app.llm_provider import create_analyzer
-from app.message_cleaner import clean_message
-from app.models import SignalAnalysis, TelegramSignal
-from app.rule_filter import should_send_to_llm
+from app.signal_processor import SignalProcessor
 from app.storage import SignalStore
 from app.telegram_client import TelegramSignalClient
 
@@ -22,47 +21,46 @@ async def run_monitor() -> None:
     store = SignalStore(settings.database_path)
     analyzer = create_analyzer(settings)
     telegram = TelegramSignalClient(settings)
+    processor = SignalProcessor(settings=settings, store=store, analyzer=analyzer, console=console)
 
-    async def handle_signal(raw_signal: TelegramSignal) -> SignalAnalysis | None:
-        cleaned_text = clean_message(raw_signal.message_text, settings.max_message_chars)
-        signal = TelegramSignal(
-            source_id=raw_signal.source_id,
-            source_title=raw_signal.source_title,
-            message_id=raw_signal.message_id,
-            message_text=cleaned_text,
-            message_date=raw_signal.message_date,
-            permalink=raw_signal.permalink,
-        )
-
-        if store.exists(signal):
-            console.print(f"[yellow]Duplicate skipped:[/yellow] {signal.source_title}#{signal.message_id}")
-            return None
-
-        rule_decision = should_send_to_llm(signal.message_text)
-        if not rule_decision.should_analyze:
-            analysis = SignalAnalysis.safe_default(rule_decision.reason)
-            store.save(signal, analysis, saved_to_telegram=False)
-            console.print(f"[dim]Rule skipped:[/dim] {rule_decision.reason}")
-            return analysis
-
-        console.print(f"[cyan]Analyzing with {settings.llm_provider}:[/cyan] {signal.source_title}#{signal.message_id}")
-        analysis = analyzer.analyze(signal.message_text)
-        should_save = analysis.is_valuable and analysis.score >= settings.min_save_score
-        stored_id = store.save(signal, analysis, saved_to_telegram=False)
-
-        if should_save:
-            await telegram.send_saved_signal(signal, analysis)
-            if stored_id:
-                store.mark_saved_to_telegram(stored_id)
-            console.print(
-                f"[green]Saved:[/green] {analysis.category} | score={analysis.score} | action={analysis.suggested_action}"
-            )
-        else:
-            console.print(f"[dim]Ignored:[/dim] score={analysis.score} reason={analysis.reason}")
-
-        return analysis
+    async def handle_signal(raw_signal):
+        result = await processor.process(raw_signal, send_saved_signal=telegram.send_saved_signal)
+        return result.analysis
 
     await telegram.run_monitor(handle_signal)
+
+
+async def run_backfill(limit: int, send: bool) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    analyzer = create_analyzer(settings)
+    telegram = TelegramSignalClient(settings)
+    processor = SignalProcessor(settings=settings, store=store, analyzer=analyzer, console=console)
+
+    console.print(f"[bold]Backfilling last {limit} text messages per source[/bold]")
+    if send:
+        console.print("[yellow]Saved signals will be sent to Telegram.[/yellow]")
+    else:
+        console.print("[dim]Dry send mode: saved signals stay local. Use --send to forward saved signals.[/dim]")
+
+    counts = {"processed": 0, "saved": 0, "saved_local": 0, "ignored": 0, "rule_skipped": 0, "duplicate": 0}
+
+    try:
+        async for signal in telegram.iter_recent_signals(limit_per_source=limit):
+            callback = telegram.send_saved_signal if send else None
+            result = await processor.process(signal, send_saved_signal=callback)
+            counts["processed"] += 1
+            counts[result.status] = counts.get(result.status, 0) + 1
+    finally:
+        await telegram.disconnect()
+
+    console.print()
+    console.print("[bold green]Backfill complete[/bold green]")
+    console.print(
+        "Processed={processed} | Saved={saved} | Saved local={saved_local} | Ignored={ignored} | Rule skipped={rule_skipped} | Duplicates={duplicate}".format(
+            **counts
+        )
+    )
 
 
 async def run_briefing(send: bool) -> None:
@@ -75,8 +73,41 @@ async def run_briefing(send: bool) -> None:
         telegram = TelegramSignalClient(settings)
         await telegram.start()
         await telegram.send_briefing(briefing)
-        await telegram.client.disconnect()
+        await telegram.disconnect()
         console.print("[green]Briefing sent to Telegram.[/green]")
+
+
+def run_recent(limit: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    signals = store.recent_saved(limit=limit)
+
+    if not signals:
+        console.print("[yellow]No saved signals found yet.[/yellow]")
+        return
+
+    table = Table(title=f"Recent saved signals ({len(signals)})")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Score", justify="right")
+    table.add_column("Category")
+    table.add_column("Action")
+    table.add_column("Source")
+    table.add_column("Summary")
+
+    for index, signal in enumerate(signals, start=1):
+        summary = signal.analysis.summary or signal.analysis.reason or signal.message_text[:120]
+        if len(summary) > 120:
+            summary = f"{summary[:117]}..."
+        table.add_row(
+            str(index),
+            f"{signal.analysis.score:.1f}",
+            signal.analysis.category,
+            signal.analysis.suggested_action,
+            signal.source_title,
+            summary,
+        )
+
+    console.print(table)
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,6 +115,13 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("monitor", help="Start Telegram monitoring")
+
+    backfill_parser = subparsers.add_parser("backfill", help="Process recent historical Telegram messages")
+    backfill_parser.add_argument("--limit", type=int, default=20, help="Number of recent text messages per source")
+    backfill_parser.add_argument("--send", action="store_true", help="Forward saved signals to Telegram")
+
+    recent_parser = subparsers.add_parser("recent", help="Show recent saved signals from local storage")
+    recent_parser.add_argument("--limit", type=int, default=20, help="Number of saved signals to show")
 
     briefing_parser = subparsers.add_parser("briefing", help="Generate a daily briefing")
     briefing_parser.add_argument("--send", action="store_true", help="Send briefing to Telegram")
@@ -96,6 +134,18 @@ def main() -> None:
 
     if args.command == "monitor":
         asyncio.run(run_monitor())
+        return
+
+    if args.command == "backfill":
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        asyncio.run(run_backfill(limit=args.limit, send=args.send))
+        return
+
+    if args.command == "recent":
+        if args.limit < 1:
+            raise RuntimeError("--limit must be at least 1")
+        run_recent(limit=args.limit)
         return
 
     if args.command == "briefing":
