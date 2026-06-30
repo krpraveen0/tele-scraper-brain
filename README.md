@@ -51,6 +51,7 @@ tele-scraper-brain/
 ├── prompts/
 │   └── classify_message.txt
 ├── tests/
+├── sources.curated.yaml
 ├── sources.example.yaml
 ├── .env.example
 ├── .gitignore
@@ -81,21 +82,31 @@ Fill `.env` with your values.
 
 Use `sources.yaml` to control source quality, category hints, thresholds, and routing.
 
+For a minimal template:
+
 ```bash
 cp sources.example.yaml sources.yaml
 ```
+
+For a web-validated curated starter pack:
+
+```bash
+cp sources.curated.yaml sources.yaml
+```
+
+The curated pack intentionally contains only exact public handles that resolved during validation. It does not include placeholder/dummy channels. It is still only a starting point: Telegram has clones, stale channels, and scam channels, so validate quality with the local `stats` command before keeping a source enabled.
 
 Example source entry:
 
 ```yaml
 sources:
-  - name: AI with Papers
-    handle: "@ai_papers"
+  - name: Moneycontrol
+    handle: "@moneycontrolcom"
     enabled: true
-    trust_score: 9
-    category_hint: Research
-    min_save_score: 7.0
-    destination: research
+    trust_score: 8
+    category_hint: Global Economy
+    min_save_score: 8.3
+    destination: global_economy
 ```
 
 When `sources.yaml` exists, it becomes the preferred source list. If it does not exist, the app falls back to legacy `SOURCE_CHATS` from `.env`.
@@ -111,6 +122,15 @@ Inspect source quality from stored data:
 ```bash
 python -m app.main stats
 ```
+
+Recommended validation loop:
+
+```bash
+python -m app.main backfill --limit 20
+python -m app.main stats
+```
+
+Disable or raise thresholds for sources with low signal ratio.
 
 ## Destination routing
 
