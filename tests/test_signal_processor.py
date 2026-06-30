@@ -24,7 +24,7 @@ class StubAnalyzer:
         return self.analysis
 
 
-class TestSettings(SimpleNamespace):
+class ProcessorSettings(SimpleNamespace):
     def min_save_score_for(self, signal: TelegramSignal) -> float:
         return self.source_registry.min_score_for(signal, self.min_save_score)
 
@@ -34,7 +34,7 @@ class TestSettings(SimpleNamespace):
 
 @pytest.fixture
 def settings(tmp_path: Path):
-    return TestSettings(
+    return ProcessorSettings(
         llm_provider="test",
         min_save_score=7.0,
         max_message_chars=5000,
