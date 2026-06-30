@@ -80,6 +80,7 @@ class SignalStore:
         return row is not None
 
     def save(self, signal: TelegramSignal, analysis: SignalAnalysis, saved_to_telegram: bool) -> int:
+        text_hash = content_hash(signal.message_text)
         with self._connect() as conn:
             cursor = conn.execute(
                 """
@@ -110,7 +111,7 @@ class SignalStore:
                     signal.message_text,
                     signal.message_date.isoformat(timespec="seconds"),
                     signal.permalink,
-                    content_hash(signal.message_text),
+                    text_hash,
                     int(analysis.is_valuable),
                     analysis.score,
                     analysis.category,
@@ -123,7 +124,18 @@ class SignalStore:
                     utc_now_iso(),
                 ),
             )
-            return int(cursor.lastrowid or 0)
+            if cursor.lastrowid:
+                return int(cursor.lastrowid)
+
+            existing = conn.execute(
+                """
+                SELECT id FROM signals
+                WHERE (source_id = ? AND message_id = ?) OR content_hash = ?
+                LIMIT 1
+                """,
+                (signal.source_id, signal.message_id, text_hash),
+            ).fetchone()
+            return int(existing["id"]) if existing else 0
 
     def mark_saved_to_telegram(self, signal_id: int) -> None:
         with self._connect() as conn:
