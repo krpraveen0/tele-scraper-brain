@@ -5,8 +5,9 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable
 
+from app.asset_generator import GeneratedAsset
 from app.dedupe import content_hash
-from app.models import FeedbackEntry, SignalAnalysis, StoredSignal, TelegramSignal, normalize_feedback_label, utc_now_iso
+from app.models import FeedbackEntry, SignalAnalysis, StoredAsset, StoredSignal, TelegramSignal, normalize_feedback_label, utc_now_iso
 
 
 SCHEMA = """
@@ -42,12 +43,29 @@ CREATE TABLE IF NOT EXISTS feedback (
     FOREIGN KEY(signal_id) REFERENCES signals(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER NOT NULL,
+    asset_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    rewritten INTEGER NOT NULL DEFAULT 0,
+    exported_path TEXT NOT NULL DEFAULT '',
+    sent_to_telegram INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    FOREIGN KEY(signal_id) REFERENCES signals(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_signals_created_at ON signals(created_at);
 CREATE INDEX IF NOT EXISTS idx_signals_category_score ON signals(category, score);
 CREATE INDEX IF NOT EXISTS idx_signals_saved ON signals(saved_to_telegram);
 CREATE INDEX IF NOT EXISTS idx_feedback_signal_id ON feedback(signal_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_label ON feedback(label);
 CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+CREATE INDEX IF NOT EXISTS idx_assets_signal_id ON assets(signal_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type_created_at ON assets(asset_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_assets_sent ON assets(sent_to_telegram);
 """
 
 
@@ -147,6 +165,64 @@ class SignalStore:
             conn.execute(
                 "UPDATE signals SET saved_to_telegram = 1 WHERE id = ?",
                 (signal_id,),
+            )
+
+    def save_asset(self, asset: GeneratedAsset, rewritten: bool = False) -> StoredAsset:
+        created_at = utc_now_iso()
+        with self._connect() as conn:
+            signal = conn.execute("SELECT 1 FROM signals WHERE id = ?", (asset.signal_id,)).fetchone()
+            if signal is None:
+                raise ValueError(f"Signal id {asset.signal_id} does not exist.")
+            cursor = conn.execute(
+                """
+                INSERT INTO assets (signal_id, asset_type, title, body, rewritten, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (asset.signal_id, asset.asset_type, asset.title, asset.body, int(rewritten), created_at),
+            )
+            asset_id = int(cursor.lastrowid)
+        return StoredAsset(
+            id=asset_id,
+            signal_id=asset.signal_id,
+            asset_type=asset.asset_type,
+            title=asset.title,
+            body=asset.body,
+            rewritten=rewritten,
+            exported_path="",
+            sent_to_telegram=False,
+            created_at=created_at,
+            sent_at=None,
+        )
+
+    def get_asset(self, asset_id: int) -> StoredAsset | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+        return self._row_to_asset(row) if row else None
+
+    def recent_assets(self, limit: int = 20) -> list[StoredAsset]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM assets
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_asset(row) for row in rows]
+
+    def mark_asset_exported(self, asset_id: int, exported_path: Path | str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE assets SET exported_path = ? WHERE id = ?",
+                (str(exported_path), asset_id),
+            )
+
+    def mark_asset_sent(self, asset_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE assets SET sent_to_telegram = 1, sent_at = ? WHERE id = ?",
+                (utc_now_iso(), asset_id),
             )
 
     def add_feedback(self, signal_id: int, label: str, notes: str = "") -> FeedbackEntry:
@@ -293,4 +369,19 @@ class SignalStore:
             label=row["label"],
             notes=row["notes"],
             created_at=row["created_at"],
+        )
+
+    @staticmethod
+    def _row_to_asset(row: sqlite3.Row) -> StoredAsset:
+        return StoredAsset(
+            id=int(row["id"]),
+            signal_id=int(row["signal_id"]),
+            asset_type=row["asset_type"],
+            title=row["title"],
+            body=row["body"],
+            rewritten=bool(row["rewritten"]),
+            exported_path=row["exported_path"],
+            sent_to_telegram=bool(row["sent_to_telegram"]),
+            created_at=row["created_at"],
+            sent_at=row["sent_at"],
         )

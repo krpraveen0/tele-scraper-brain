@@ -187,6 +187,23 @@ class FeedbackEntry:
     created_at: str
 
 
+@dataclass(frozen=True)
+class StoredAsset:
+    id: int
+    signal_id: int
+    asset_type: str
+    title: str
+    body: str
+    rewritten: bool
+    exported_path: str
+    sent_to_telegram: bool
+    created_at: str
+    sent_at: str | None
+
+    def render(self) -> str:
+        return f"# {self.title}\n\n{self.body}".strip()
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 

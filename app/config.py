@@ -32,6 +32,7 @@ class Settings:
     source_chats: list[str]
     destination_chat: str
     briefing_chat: str
+    asset_chat: str
     destinations: dict[str, str]
     source_registry: SourceRegistry
     sources_config_path: Path
@@ -44,6 +45,7 @@ class Settings:
     min_save_score: float
     max_message_chars: int
     database_path: Path
+    asset_export_dir: Path
     telegram_session_name: str
 
     def min_save_score_for(self, signal: TelegramSignal) -> float:
@@ -72,6 +74,7 @@ def load_settings() -> Settings:
     legacy_source_chats = _split_csv(os.getenv("SOURCE_CHATS", ""))
     destination_chat = os.getenv("DESTINATION_CHAT", "").strip()
     briefing_chat = os.getenv("BRIEFING_CHAT", "").strip() or destination_chat
+    asset_chat = os.getenv("ASSET_CHAT", "").strip() or destination_chat
     llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
     min_save_score = float(os.getenv("MIN_SAVE_SCORE", "7.0"))
     sources_config_path = Path(os.getenv("SOURCES_CONFIG_PATH", "sources.yaml"))
@@ -103,6 +106,7 @@ def load_settings() -> Settings:
         source_chats=source_chats,
         destination_chat=destination_chat,
         briefing_chat=briefing_chat,
+        asset_chat=asset_chat,
         destinations=_load_destinations(destination_chat),
         source_registry=source_registry,
         sources_config_path=sources_config_path,
@@ -115,5 +119,6 @@ def load_settings() -> Settings:
         min_save_score=min_save_score,
         max_message_chars=int(os.getenv("MAX_MESSAGE_CHARS", "5000")),
         database_path=Path(os.getenv("DATABASE_PATH", "data/signals.db")),
+        asset_export_dir=Path(os.getenv("ASSET_EXPORT_DIR", "assets")),
         telegram_session_name=os.getenv("TELEGRAM_SESSION_NAME", "tele_scraper_brain").strip(),
     )
