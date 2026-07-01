@@ -15,6 +15,7 @@ from app.config import load_settings
 from app.daily_action_brief import build_daily_action_brief
 from app.daily_briefing import build_daily_briefing
 from app.feedback_profile import build_feedback_profile
+from app.idea_lab import generate_idea_lab_report
 from app.llm_provider import create_analyzer
 from app.models import ALLOWED_FEEDBACK_LABELS, FeedbackEntry, StoredAsset, StoredSignal, TelegramSignal
 from app.signal_processor import SignalProcessor
@@ -155,6 +156,17 @@ def run_feedback_profile(limit: int) -> None:
     store = SignalStore(settings.database_path)
     profile = build_feedback_profile(store, limit=limit)
     console.print(profile)
+
+
+def run_idea_lab(signal_id: int) -> None:
+    settings = load_settings()
+    store = SignalStore(settings.database_path)
+    signal = store.get_signal(signal_id)
+    if signal is None:
+        raise ValueError(f"Signal id {signal_id} does not exist.")
+
+    report = generate_idea_lab_report(signal)
+    console.print(report.render())
 
 
 def run_recent(limit: int) -> None:
@@ -498,6 +510,9 @@ def parse_args() -> argparse.Namespace:
     action_brief_parser.add_argument("--limit", type=int, default=60, help="Maximum saved signals to inspect")
     action_brief_parser.add_argument("--send", action="store_true", help="Send daily action brief to Telegram")
 
+    idea_lab_parser = subparsers.add_parser("idea-lab", help="Generate an Idea Lab report from a saved signal")
+    idea_lab_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
+
     asset_parser = subparsers.add_parser("create-asset", help="Create a reusable asset draft from a saved signal")
     asset_parser.add_argument("--id", type=int, required=True, help="Signal ID from recent or unsent table")
     asset_parser.add_argument("--type", required=True, choices=sorted(ALLOWED_ASSET_TYPES), help="Asset type to generate")
@@ -567,6 +582,11 @@ def main() -> None:
         if args.limit < 1:
             raise RuntimeError("--limit must be at least 1")
         asyncio.run(run_daily_action_brief(hours=args.hours, limit=args.limit, send=args.send))
+        return
+    if args.command == "idea-lab":
+        if args.id < 1:
+            raise RuntimeError("--id must be at least 1")
+        run_idea_lab(signal_id=args.id)
         return
     if args.command == "create-asset":
         if args.id < 1:
