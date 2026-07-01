@@ -29,6 +29,27 @@ from app.ui_services import (
 
 st.set_page_config(page_title="Praveen Signal OS", page_icon="🧠", layout="wide")
 
+QUICK_FEEDBACK_ACTIONS = [
+    ("Useful", "useful", "Useful signal"),
+    ("Not useful", "not_useful", "Too generic or noisy"),
+    ("Career", "career_opportunity", "Career opportunity"),
+    ("LinkedIn", "linkedin_idea", "Can become a LinkedIn post"),
+    ("Teaching", "teaching_example", "Can be used in class"),
+    ("Research", "research_note", "Worth deeper research"),
+    ("Tool", "tool_to_try", "Tool or repo worth trying"),
+    ("English", "english_practice", "Useful for speaking practice"),
+]
+
+QUICK_ASSET_ACTIONS = [
+    ("LinkedIn post", "linkedin"),
+    ("Medium outline", "medium_outline"),
+    ("Teaching example", "teaching_example"),
+    ("Career note", "career_note"),
+    ("English practice", "english_practice"),
+    ("Research note", "research_note"),
+    ("Tool review", "tool_review"),
+]
+
 
 @st.cache_resource
 def get_runtime() -> tuple[object, SignalStore]:
@@ -37,31 +58,22 @@ def get_runtime() -> tuple[object, SignalStore]:
 
 
 def main() -> None:
-    st.title("🧠 Praveen Signal OS")
+    st.title("Praveen Signal OS")
     st.caption("Local dashboard for signals, feedback, assets, briefings, and source intelligence.")
 
     try:
         settings, store = get_runtime()
-    except Exception as exc:  # noqa: BLE001 - Streamlit should show config errors instead of crashing.
+    except Exception as exc:  # noqa: BLE001
         st.error("Could not load app settings. Check your `.env` values and sources config.")
         st.exception(exc)
         return
 
-    tabs = st.tabs(
-        [
-            "Dashboard",
-            "Signals Inbox",
-            "Asset Studio",
-            "Briefings",
-            "Feedback Profile",
-            "Assets",
-        ]
-    )
+    tabs = st.tabs(["Dashboard", "Signals Inbox", "Asset Studio", "Briefings", "Feedback Profile", "Assets"])
 
     with tabs[0]:
         render_dashboard(store)
     with tabs[1]:
-        render_signals_inbox(store)
+        render_signals_inbox(settings, store)
     with tabs[2]:
         render_asset_studio(settings, store)
     with tabs[3]:
@@ -82,6 +94,13 @@ def render_dashboard(store: SignalStore) -> None:
     col4.metric("Assets", snapshot.recent_assets)
     col5.metric("Feedback labels", snapshot.feedback_labels)
 
+    st.subheader("Main actions")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.info("1. Open Signals Inbox")
+    c2.info("2. Label useful or noisy signals")
+    c3.info("3. Generate assets from strong signals")
+    c4.info("4. Review briefings and feedback profile")
+
     left, right = st.columns(2)
     with left:
         st.subheader("Top categories")
@@ -97,11 +116,8 @@ def render_dashboard(store: SignalStore) -> None:
         else:
             st.info("No source data yet. Run backfill or monitor first.")
 
-    st.subheader("Recommended next step")
-    st.code("python -m app.main backfill --limit 20\npython -m app.main daily-action-brief", language="bash")
 
-
-def render_signals_inbox(store: SignalStore) -> None:
+def render_signals_inbox(settings: object, store: SignalStore) -> None:
     st.subheader("Signals Inbox")
     view = st.radio("View", ["Unsent", "Recent sent", "All"], horizontal=True)
     limit = st.slider("Limit", min_value=10, max_value=300, value=50, step=10, key="signals_limit")
@@ -120,14 +136,44 @@ def render_signals_inbox(store: SignalStore) -> None:
     st.dataframe(signal_table_rows(signals), use_container_width=True, hide_index=True)
 
     st.divider()
-    st.subheader("Take action on one signal")
+    st.subheader("Action Center")
     selected_id = st.selectbox("Signal ID", [signal.id for signal in signals], key="signal_action_id")
     signal = store.get_signal(int(selected_id))
-    if signal:
-        render_signal_card(signal)
-        label = st.selectbox("Feedback label", allowed_feedback_labels(), key="feedback_label")
-        notes = st.text_input("Feedback notes", key="feedback_notes")
-        if st.button("Save feedback", type="primary"):
+    if not signal:
+        st.warning("Selected signal could not be loaded.")
+        return
+
+    render_signal_card(signal)
+    render_quick_feedback(store, signal)
+    render_quick_assets(settings, store, signal)
+
+
+def render_signal_card(signal: StoredSignal) -> None:
+    st.markdown(f"**{signal.analysis.category}** | score `{signal.analysis.score:.1f}` | source `{signal.source_title}`")
+    st.write(signal.analysis.summary or signal.analysis.reason or signal.message_text[:500])
+    if signal.permalink:
+        st.link_button("Open source", signal.permalink)
+    with st.expander("Original message"):
+        st.write(signal.message_text)
+
+
+def render_quick_feedback(store: SignalStore, signal: StoredSignal) -> None:
+    st.markdown("### Quick feedback")
+    for start in range(0, len(QUICK_FEEDBACK_ACTIONS), 4):
+        columns = st.columns(4)
+        for column, (text, label, note) in zip(columns, QUICK_FEEDBACK_ACTIONS[start : start + 4]):
+            if column.button(text, key=f"feedback_{signal.id}_{label}"):
+                try:
+                    message = add_feedback_label(store, signal.id, label, note)
+                    st.success(message)
+                    st.cache_resource.clear()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(str(exc))
+
+    with st.expander("Custom feedback"):
+        label = st.selectbox("Feedback label", allowed_feedback_labels(), key=f"custom_label_{signal.id}")
+        notes = st.text_input("Notes", key=f"custom_notes_{signal.id}")
+        if st.button("Save custom feedback", key=f"save_custom_{signal.id}"):
             try:
                 message = add_feedback_label(store, signal.id, label, notes)
                 st.success(message)
@@ -136,13 +182,35 @@ def render_signals_inbox(store: SignalStore) -> None:
                 st.error(str(exc))
 
 
-def render_signal_card(signal: StoredSignal) -> None:
-    st.markdown(f"**{signal.analysis.category}** · score `{signal.analysis.score:.1f}` · source `{signal.source_title}`")
-    st.write(signal.analysis.summary or signal.analysis.reason or signal.message_text[:500])
-    if signal.permalink:
-        st.link_button("Open source", signal.permalink)
-    with st.expander("Original message"):
-        st.write(signal.message_text)
+def render_quick_assets(settings: object, store: SignalStore, signal: StoredSignal) -> None:
+    st.markdown("### Quick asset generation")
+    save_asset = st.checkbox("Save asset", value=True, key=f"save_asset_{signal.id}")
+    export_asset = st.checkbox("Export Markdown", value=False, key=f"export_asset_{signal.id}")
+    rewrite_asset = st.checkbox("Rewrite with LLM", value=False, key=f"rewrite_asset_{signal.id}")
+
+    for start in range(0, len(QUICK_ASSET_ACTIONS), 4):
+        columns = st.columns(4)
+        for column, (text, asset_type) in zip(columns, QUICK_ASSET_ACTIONS[start : start + 4]):
+            if column.button(text, key=f"asset_{signal.id}_{asset_type}"):
+                try:
+                    result = create_asset_result(
+                        settings=settings,
+                        store=store,
+                        signal_id=signal.id,
+                        asset_type=asset_type,
+                        rewrite=rewrite_asset,
+                        save=save_asset,
+                        export=export_asset,
+                    )
+                    st.success(f"Generated {asset_type} asset.")
+                    if result.stored_asset:
+                        st.info(f"Saved asset ID: {result.stored_asset.id}")
+                    if result.exported_path:
+                        st.info(f"Exported: {result.exported_path}")
+                    st.markdown(result.asset.render())
+                    st.cache_resource.clear()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(str(exc))
 
 
 def render_asset_studio(settings: object, store: SignalStore) -> None:
@@ -194,9 +262,13 @@ def render_briefings(settings: object, store: SignalStore) -> None:
     hours = st.slider("Lookback hours", min_value=1, max_value=168, value=24)
     limit = st.slider("Signal limit", min_value=10, max_value=300, value=60, step=10, key="brief_limit")
 
-    if st.button("Generate daily action brief", type="primary"):
+    c1, c2 = st.columns(2)
+    if c1.button("Generate daily action brief", type="primary"):
         brief = build_action_brief(store, hours=hours, limit=limit)
         st.session_state["last_action_brief"] = brief
+    if c2.button("Refresh feedback profile"):
+        st.session_state["feedback_profile"] = build_profile(store, limit=200)
+        st.success("Feedback profile refreshed. Open the Feedback Profile tab.")
 
     brief_text = st.session_state.get("last_action_brief", "")
     if brief_text:
