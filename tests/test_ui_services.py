@@ -11,6 +11,7 @@ from app.ui_services import (
     allowed_asset_types,
     allowed_feedback_labels,
     create_asset_result,
+    create_idea_lab_report,
     dashboard_snapshot,
     list_signals,
     signal_table_rows,
@@ -92,6 +93,18 @@ def test_create_asset_result_can_export(tmp_path: Path) -> None:
     assert result.exported_path is not None
     assert result.exported_path.exists()
     assert result.asset.asset_type == "teaching_example"
+
+
+def test_create_idea_lab_report_from_saved_signal(tmp_path: Path) -> None:
+    store = SignalStore(tmp_path / "signals.db")
+    signal_id = save_signal(store, 1)
+
+    report = create_idea_lab_report(store, signal_id)
+
+    assert report.signal_id == signal_id
+    assert report.source == "Source 1"
+    assert len(report.content_angles) == 10
+    assert "# Idea Lab Report" in report.render()
 
 
 def test_allowed_ui_options_are_exposed() -> None:

@@ -21,6 +21,7 @@ from app.ui_services import (
     build_action_brief,
     build_profile,
     create_asset_result,
+    create_idea_lab_report,
     dashboard_snapshot,
     list_signals,
     signal_table_rows,
@@ -59,7 +60,7 @@ def get_runtime() -> tuple[object, SignalStore]:
 
 def main() -> None:
     st.title("Praveen Signal OS")
-    st.caption("Local dashboard for signals, feedback, assets, briefings, and source intelligence.")
+    st.caption("Local dashboard for signals, creator workflows, feedback, assets, briefings, and source intelligence.")
 
     try:
         settings, store = get_runtime()
@@ -68,19 +69,21 @@ def main() -> None:
         st.exception(exc)
         return
 
-    tabs = st.tabs(["Dashboard", "Signals Inbox", "Asset Studio", "Briefings", "Feedback Profile", "Assets"])
+    tabs = st.tabs(["Dashboard", "Signals Inbox", "Creator Studio", "Asset Studio", "Briefings", "Feedback Profile", "Assets"])
 
     with tabs[0]:
         render_dashboard(store)
     with tabs[1]:
         render_signals_inbox(settings, store)
     with tabs[2]:
-        render_asset_studio(settings, store)
+        render_creator_studio(store)
     with tabs[3]:
-        render_briefings(settings, store)
+        render_asset_studio(settings, store)
     with tabs[4]:
-        render_feedback_profile(store)
+        render_briefings(settings, store)
     with tabs[5]:
+        render_feedback_profile(store)
+    with tabs[6]:
         render_assets(settings, store)
 
 
@@ -98,8 +101,8 @@ def render_dashboard(store: SignalStore) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.info("1. Open Signals Inbox")
     c2.info("2. Label useful or noisy signals")
-    c3.info("3. Generate assets from strong signals")
-    c4.info("4. Review briefings and feedback profile")
+    c3.info("3. Open Creator Studio")
+    c4.info("4. Generate assets or briefings")
 
     left, right = st.columns(2)
     with left:
@@ -146,6 +149,45 @@ def render_signals_inbox(settings: object, store: SignalStore) -> None:
     render_signal_card(signal)
     render_quick_feedback(store, signal)
     render_quick_assets(settings, store, signal)
+
+
+def render_creator_studio(store: SignalStore) -> None:
+    st.subheader("Creator Studio")
+    st.caption("Turn one strong signal into original writing, course, podcast, and story directions.")
+
+    creator_tabs = st.tabs(["Idea Lab"])
+    with creator_tabs[0]:
+        render_idea_lab(store)
+
+
+def render_idea_lab(store: SignalStore) -> None:
+    st.markdown("### Idea Lab")
+    st.write("Select one saved signal and generate a deterministic Idea Lab report. This does not call an LLM or save anything yet.")
+
+    signals = list_signals(store, view="All", limit=200)
+    if not signals:
+        st.info("No saved signals yet. Run backfill or monitor first.")
+        return
+
+    st.dataframe(signal_table_rows(signals), use_container_width=True, hide_index=True)
+    selected_id = st.selectbox("Signal ID", [signal.id for signal in signals], key="idea_lab_signal_id")
+    signal = store.get_signal(int(selected_id))
+    if signal:
+        render_signal_card(signal)
+
+    if st.button("Generate Idea Lab Report", type="primary", key="generate_idea_lab_report"):
+        try:
+            report = create_idea_lab_report(store, int(selected_id))
+            st.session_state["last_idea_lab_report"] = report.render()
+            st.success("Idea Lab report generated.")
+        except Exception as exc:  # noqa: BLE001
+            st.error(str(exc))
+
+    report_text = st.session_state.get("last_idea_lab_report", "")
+    if report_text:
+        st.markdown(report_text)
+        with st.expander("Copy-friendly Markdown"):
+            st.code(report_text, language="markdown")
 
 
 def render_signal_card(signal: StoredSignal) -> None:
