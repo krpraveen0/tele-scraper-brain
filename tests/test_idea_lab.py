@@ -9,6 +9,7 @@ def make_stored_signal(
     suggested_action: str = "Create Medium outline",
     tags: list[str] | None = None,
 ) -> StoredSignal:
+    resolved_tags = ["#agents", "#context"] if tags is None else tags
     return StoredSignal(
         id=42,
         source_id="source-1",
@@ -23,7 +24,7 @@ def make_stored_signal(
             category=category,
             reason="Useful creator and AI engineering signal.",
             summary="A useful agent workflow for memory, routing, evaluation and context engineering patterns.",
-            tags=tags or ["#agents", "#context"],
+            tags=resolved_tags,
             suggested_action=suggested_action,
         ),
         saved_to_telegram=False,
