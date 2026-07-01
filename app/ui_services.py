@@ -9,6 +9,7 @@ from app.asset_rewriter import create_asset_rewriter
 from app.config import Settings
 from app.daily_action_brief import build_daily_action_brief
 from app.feedback_profile import build_feedback_profile
+from app.idea_lab import IdeaLabReport, generate_idea_lab_report
 from app.models import ALLOWED_FEEDBACK_LABELS, StoredAsset, StoredSignal
 from app.storage import SignalStore
 
@@ -88,6 +89,13 @@ def signal_table_rows(signals: list[StoredSignal]) -> list[dict[str, object]]:
 def add_feedback_label(store: SignalStore, signal_id: int, label: str, notes: str = "") -> str:
     feedback = store.add_feedback(signal_id=signal_id, label=label, notes=notes)
     return f"Saved feedback #{feedback.id}: {feedback.label} for signal {feedback.signal_id}"
+
+
+def create_idea_lab_report(store: SignalStore, signal_id: int) -> IdeaLabReport:
+    signal = store.get_signal(signal_id)
+    if signal is None:
+        raise ValueError(f"Signal id {signal_id} does not exist.")
+    return generate_idea_lab_report(signal)
 
 
 def create_asset_result(
