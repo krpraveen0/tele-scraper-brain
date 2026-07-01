@@ -393,8 +393,49 @@ async def send_asset_to_telegram(settings: object, store: SignalStore, asset: St
 
 
 from app.creator_studio_ui import render_creator_studio_v2
+from app.publishing_queue_ui import render_publishing_queue
 
 render_creator_studio = render_creator_studio_v2
+
+
+def main() -> None:
+    st.title("Praveen Signal OS")
+    st.caption("Local dashboard for signals, creator workflows, feedback, assets, briefings, and source intelligence.")
+
+    try:
+        settings, store = get_runtime()
+    except Exception as exc:  # noqa: BLE001
+        st.error("Could not load app settings. Check your `.env` values and sources config.")
+        st.exception(exc)
+        return
+
+    tabs = st.tabs([
+        "Dashboard",
+        "Signals Inbox",
+        "Creator Studio",
+        "Publishing Queue",
+        "Asset Studio",
+        "Briefings",
+        "Feedback Profile",
+        "Assets",
+    ])
+
+    with tabs[0]:
+        render_dashboard(store)
+    with tabs[1]:
+        render_signals_inbox(settings, store)
+    with tabs[2]:
+        render_creator_studio(store)
+    with tabs[3]:
+        render_publishing_queue(settings.database_path)
+    with tabs[4]:
+        render_asset_studio(settings, store)
+    with tabs[5]:
+        render_briefings(settings, store)
+    with tabs[6]:
+        render_feedback_profile(store)
+    with tabs[7]:
+        render_assets(settings, store)
 
 
 if __name__ == "__main__":
