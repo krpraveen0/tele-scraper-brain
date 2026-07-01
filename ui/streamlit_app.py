@@ -392,5 +392,10 @@ async def send_asset_to_telegram(settings: object, store: SignalStore, asset: St
         await telegram.disconnect()
 
 
+from app.creator_studio_ui import render_creator_studio_v2
+
+render_creator_studio = render_creator_studio_v2
+
+
 if __name__ == "__main__":
     main()
