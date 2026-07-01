@@ -204,6 +204,72 @@ class StoredAsset:
         return f"# {self.title}\n\n{self.body}".strip()
 
 
+@dataclass(frozen=True)
+class StoredIdea:
+    id: int
+    signal_id: int
+    core_insight: str
+    hidden_gap: str
+    novel_angle: str
+    recommended_format: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class StoredIdeaAngle:
+    id: int
+    idea_id: int
+    angle_type: str
+    title: str
+    description: str
+    target_audience: str
+    score: float
+
+
+@dataclass(frozen=True)
+class StoredBlueprint:
+    id: int
+    idea_id: int
+    blueprint_type: str
+    title: str
+    audience: str
+    promise: str
+    opening_scene: str
+    unique_angle: str
+    framework: str
+    sections: list[dict[str, Any]]
+    diagram_idea: str
+    conclusion: str
+    call_to_action: str
+    quality_checklist: list[str]
+    quality_score: float
+    created_at: str
+
+    def render(self) -> str:
+        lines = [
+            f"# {self.title}",
+            "",
+            f"Blueprint type: {self.blueprint_type}",
+            "",
+            "## Audience",
+            self.audience,
+            "",
+            "## Promise",
+            self.promise,
+            "",
+            "## Structure",
+        ]
+        for section in self.sections:
+            lines.append(f"### {section.get('title', '')}")
+            if section.get("purpose"):
+                lines.append(str(section["purpose"]))
+            for bullet in section.get("bullets", []):
+                lines.append(f"- {bullet}")
+        lines.extend(["", "## Diagram Idea", self.diagram_idea, "", "## Quality Checklist"])
+        lines.extend(f"- [ ] {item}" for item in self.quality_checklist)
+        return "\n".join(lines).strip()
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
