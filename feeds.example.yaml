@@ -1,0 +1,27 @@
+feeds:
+  - name: OpenAI Blog
+    url: https://openai.com/blog/rss.xml
+    enabled: true
+    trust_score: 8.5
+    category_hint: AI Engineering
+    min_save_score: 7.5
+    destination: ai_engineering
+    notes: Model, product, and platform updates.
+
+  - name: GitHub Blog AI and ML
+    url: https://github.blog/ai-and-ml/feed/
+    enabled: true
+    trust_score: 8.0
+    category_hint: Tools
+    min_save_score: 7.5
+    destination: tools
+    notes: Copilot, developer tooling, and AI engineering workflow posts.
+
+  - name: Hugging Face Blog
+    url: https://huggingface.co/blog/feed.xml
+    enabled: true
+    trust_score: 8.0
+    category_hint: Tools
+    min_save_score: 7.5
+    destination: tools
+    notes: Open-source models, datasets, and practical ML tools.
