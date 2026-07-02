@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.config import load_settings
 from app.creator_studio_ui import render_creator_studio_v2
+from app.export_archive_ui import render_export_archive_workflow
 from app.models import StoredAsset, StoredSignal
 from app.publishing_queue_ui import render_publishing_queue
 from app.quality_gate_ui import render_quality_gate_dashboard
@@ -62,7 +63,7 @@ def get_runtime() -> tuple[object, SignalStore]:
 
 def main() -> None:
     st.title("Praveen Signal OS")
-    st.caption("Local dashboard for signals, creator workflows, quality gates, feedback, assets, briefings, and source intelligence.")
+    st.caption("Local dashboard for signals, creator workflows, quality gates, exports, feedback, assets, briefings, and source intelligence.")
 
     try:
         settings, store = get_runtime()
@@ -76,6 +77,7 @@ def main() -> None:
         "Signals Inbox",
         "Creator Studio",
         "Quality Gate",
+        "Export & Archive",
         "Publishing Queue",
         "Asset Studio",
         "Briefings",
@@ -92,14 +94,16 @@ def main() -> None:
     with tabs[3]:
         render_quality_gate_dashboard()
     with tabs[4]:
-        render_publishing_queue(settings.database_path)
+        render_export_archive_workflow(settings.asset_export_dir)
     with tabs[5]:
-        render_asset_studio(settings, store)
+        render_publishing_queue(settings.database_path)
     with tabs[6]:
-        render_briefings(settings, store)
+        render_asset_studio(settings, store)
     with tabs[7]:
-        render_feedback_profile(store)
+        render_briefings(settings, store)
     with tabs[8]:
+        render_feedback_profile(store)
+    with tabs[9]:
         render_assets(settings, store)
 
 
@@ -118,7 +122,7 @@ def render_dashboard(store: SignalStore) -> None:
     c1.info("1. Open Signals Inbox")
     c2.info("2. Create or inspect Creator Studio outputs")
     c3.info("3. Run Quality Gate before publishing")
-    c4.info("4. Queue, export, or send assets")
+    c4.info("4. Export, archive, queue, or send assets")
 
     left, right = st.columns(2)
     with left:
