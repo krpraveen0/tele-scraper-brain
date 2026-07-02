@@ -92,6 +92,16 @@ def intake_commands(limit: int = 20, send: bool = False) -> list[IntakeCommand]:
             purpose="Print configured RSS/blog feed metadata from feeds.yaml.",
         ),
         IntakeCommand(
+            title="Run due schedules once",
+            command="python -m app.intake_scheduler_cli run-due",
+            purpose="Run due intake scheduler jobs once and mark successful jobs as run.",
+        ),
+        IntakeCommand(
+            title="List due schedules",
+            command="python -m app.intake_scheduler_cli due",
+            purpose="Show due intake scheduler jobs without running them.",
+        ),
+        IntakeCommand(
             title="Live Telegram monitor",
             command="python -m app.main monitor",
             purpose="Keep listening for new Telegram messages until you stop the process.",
@@ -120,6 +130,9 @@ def command_rows(commands: list[IntakeCommand]) -> list[dict[str, str]]:
 
 def scheduler_snippets(limit: int = 20) -> dict[str, str]:
     return {
+        "scheduler_runner_every_hour": "0 * * * * cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.intake_scheduler_cli run-due >> logs/intake-scheduler.log 2>&1",
+        "scheduler_runner_dry_run": "cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.intake_scheduler_cli run-due --dry-run",
+        "list_due_schedules": "cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.intake_scheduler_cli due",
         "telegram_cron_every_2_hours": f"0 */2 * * * cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.main backfill --limit {limit} >> logs/telegram-backfill.log 2>&1",
         "rss_cron_every_4_hours": f"0 */4 * * * cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.rss_cli backfill --feeds feeds.yaml --limit {limit} >> logs/rss-backfill.log 2>&1",
         "manual_telegram_monitor": "cd /path/to/tele-scraper-brain && . .venv/bin/activate && python -m app.main monitor",

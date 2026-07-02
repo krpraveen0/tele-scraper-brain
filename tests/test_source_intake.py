@@ -12,13 +12,15 @@ from app.source_intake import (
 )
 
 
-def test_intake_commands_include_telegram_rss_and_monitor() -> None:
+def test_intake_commands_include_telegram_rss_scheduler_and_monitor() -> None:
     commands = intake_commands(limit=25, send=True)
     rows = command_rows(commands)
 
     assert any("app.main backfill --limit 25 --send" in row["command"] for row in rows)
     assert any("app.rss_cli backfill --feeds feeds.yaml --limit 25 --send" in row["command"] for row in rows)
     assert any("--fetch-articles --send" in row["command"] for row in rows)
+    assert any("app.intake_scheduler_cli run-due" in row["command"] for row in rows)
+    assert any("app.intake_scheduler_cli due" in row["command"] for row in rows)
     assert any("feed-specific thresholds" in row["purpose"] for row in rows)
     assert any(row["command"] == "python -m app.main monitor" for row in rows)
     assert any("recommend-sources" in row["command"] for row in rows)
@@ -45,9 +47,12 @@ feeds:
     assert rows[0]["destination"] == "research"
 
 
-def test_scheduler_snippets_include_telegram_rss_and_monitor() -> None:
+def test_scheduler_snippets_include_scheduler_telegram_rss_and_monitor() -> None:
     snippets = scheduler_snippets(limit=30)
 
+    assert "app.intake_scheduler_cli run-due" in snippets["scheduler_runner_every_hour"]
+    assert "app.intake_scheduler_cli run-due --dry-run" in snippets["scheduler_runner_dry_run"]
+    assert "app.intake_scheduler_cli due" in snippets["list_due_schedules"]
     assert "app.main backfill --limit 30" in snippets["telegram_cron_every_2_hours"]
     assert "app.rss_cli backfill --feeds feeds.yaml --limit 30" in snippets["rss_cron_every_4_hours"]
     assert "python -m app.main monitor" in snippets["manual_telegram_monitor"]
