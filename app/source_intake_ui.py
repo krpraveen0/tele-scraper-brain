@@ -8,6 +8,7 @@ import streamlit as st
 from app.config import Settings
 from app.source_intake import (
     command_rows,
+    configured_feed_rows,
     configured_source_rows,
     feed_candidate_rows,
     intake_commands,
@@ -75,8 +76,19 @@ def render_configured_sources(settings: Settings) -> None:
         st.info("No configured Telegram sources found. Add Telegram channels/groups to sources.yaml or SOURCE_CHATS.")
 
     st.markdown("### Configured RSS/blog Feeds")
-    st.write("RSS/blog feeds are loaded from `feeds.yaml`. Copy `feeds.example.yaml` to `feeds.yaml` and edit it.")
-    st.code("python -m app.rss_cli feeds --feeds feeds.yaml", language="bash")
+    feeds_path = st.text_input("Feeds config path", value="feeds.yaml", key="feeds_config_path")
+    st.write("Feed-specific `min_save_score` and `destination` are active during RSS backfill.")
+    try:
+        feed_rows = configured_feed_rows(feeds_path)
+    except Exception as exc:  # noqa: BLE001
+        st.error(str(exc))
+        feed_rows = []
+
+    if feed_rows:
+        st.dataframe(feed_rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No configured RSS/blog feeds found. Copy feeds.example.yaml to feeds.yaml and edit it.")
+    st.code(f"python -m app.rss_cli feeds --feeds {feeds_path}", language="bash")
 
 
 def render_source_quality(store: SignalStore) -> None:
