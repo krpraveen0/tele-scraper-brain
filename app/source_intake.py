@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from app.config import Settings
+from app.rss_feed_connector import FeedRegistry, feed_rows
 from app.source_recommender import recommend_sources
 from app.storage import SignalStore
 
@@ -39,6 +41,11 @@ def configured_source_rows(settings: Settings) -> list[dict[str, object]]:
     ]
 
 
+def configured_feed_rows(feeds_path: str = "feeds.yaml") -> list[dict[str, object]]:
+    registry = FeedRegistry.from_yaml(Path(feeds_path))
+    return feed_rows(registry)
+
+
 def source_quality_rows(store: SignalStore) -> list[dict[str, object]]:
     return store.source_stats()
 
@@ -72,12 +79,12 @@ def intake_commands(limit: int = 20, send: bool = False) -> list[IntakeCommand]:
         IntakeCommand(
             title="RSS/blog backfill now",
             command=f"python -m app.rss_cli backfill --feeds feeds.yaml --limit {limit}{send_flag}",
-            purpose="Fetch recent RSS/blog feed entries and process them through the same signal analyzer.",
+            purpose="Fetch recent RSS/blog feed entries and process them through the same signal analyzer with feed-specific thresholds and routing.",
         ),
         IntakeCommand(
             title="RSS/blog full article backfill",
             command=f"python -m app.rss_cli backfill --feeds feeds.yaml --limit {limit} --fetch-articles{send_flag}",
-            purpose="Fetch feed entries, extract full article text with Trafilatura, and analyze richer signals.",
+            purpose="Fetch feed entries, extract full article text with Trafilatura, and analyze richer signals with feed-specific thresholds and routing.",
         ),
         IntakeCommand(
             title="Show RSS/blog feeds",
