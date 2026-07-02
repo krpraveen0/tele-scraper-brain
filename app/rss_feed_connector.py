@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
@@ -11,8 +11,9 @@ import httpx
 import trafilatura
 import yaml
 
+from app.config import Settings
 from app.models import TelegramSignal
-from app.sources import normalize_destination_key
+from app.sources import SourceConfig, SourceRegistry, normalize_destination_key
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,29 @@ class FeedRegistry:
         return [feed for feed in self.feeds if feed.enabled]
 
 
+def feed_to_source_config(feed: FeedSource) -> SourceConfig:
+    return SourceConfig(
+        name=feed.name,
+        handle=feed.url,
+        enabled=feed.enabled,
+        trust_score=feed.trust_score,
+        category_hint=feed.category_hint,
+        min_save_score=feed.min_save_score,
+        destination=feed.destination,
+        notes=feed.notes,
+    )
+
+
+def feed_source_registry(registry: FeedRegistry, existing: SourceRegistry | None = None) -> SourceRegistry:
+    existing_sources = existing.sources if existing is not None else []
+    feed_sources = [feed_to_source_config(feed) for feed in registry.feeds]
+    return SourceRegistry([*existing_sources, *feed_sources])
+
+
+def settings_with_feed_routing(settings: Settings, registry: FeedRegistry) -> Settings:
+    return replace(settings, source_registry=feed_source_registry(registry, existing=settings.source_registry))
+
+
 def parse_feed_text(feed: FeedSource, feed_text: str, limit: int = 20) -> list[TelegramSignal]:
     parsed = feedparser.parse(feed_text)
     signals: list[TelegramSignal] = []
@@ -124,6 +148,8 @@ def entry_to_signal(feed: FeedSource, entry: Any, article_text: str = "") -> Tel
         f"Title: {title}" if title else "",
         f"Source: {feed.name}",
         f"Category hint: {feed.category_hint}" if feed.category_hint else "",
+        f"Route hint: {feed.destination}" if feed.destination and feed.destination != "default" else "",
+        f"Minimum score hint: {feed.min_save_score:.1f}" if feed.min_save_score is not None else "",
         f"Link: {link}" if link else "",
         "",
         "Summary:",
@@ -136,7 +162,7 @@ def entry_to_signal(feed: FeedSource, entry: Any, article_text: str = "") -> Tel
         source_id=feed.source_id,
         source_title=feed.name,
         message_id=stable_message_id(link or f"{feed.url}:{title}:{published.isoformat()}"),
-        message_text="\n".join(part for part in body_parts if part is not None).strip(),
+        message_text="\n".join(part for part in body_parts if part).strip(),
         message_date=published,
         permalink=link or None,
         source_ref=feed.url,
