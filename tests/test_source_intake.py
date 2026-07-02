@@ -9,21 +9,23 @@ from app.source_intake import (
 )
 
 
-def test_intake_commands_include_backfill_and_monitor() -> None:
+def test_intake_commands_include_telegram_rss_and_monitor() -> None:
     commands = intake_commands(limit=25, send=True)
     rows = command_rows(commands)
 
-    assert any("backfill --limit 25 --send" in row["command"] for row in rows)
+    assert any("app.main backfill --limit 25 --send" in row["command"] for row in rows)
+    assert any("app.rss_cli backfill --feeds feeds.yaml --limit 25 --send" in row["command"] for row in rows)
+    assert any("--fetch-articles --send" in row["command"] for row in rows)
     assert any(row["command"] == "python -m app.main monitor" for row in rows)
     assert any("recommend-sources" in row["command"] for row in rows)
 
 
-def test_scheduler_snippets_include_cron_and_monitor() -> None:
+def test_scheduler_snippets_include_telegram_rss_and_monitor() -> None:
     snippets = scheduler_snippets(limit=30)
 
-    assert "backfill --limit 30" in snippets["cron_every_2_hours"]
-    assert "python -m app.main monitor" in snippets["manual_monitor"]
-    assert "mac_launchd_command" in snippets
+    assert "app.main backfill --limit 30" in snippets["telegram_cron_every_2_hours"]
+    assert "app.rss_cli backfill --feeds feeds.yaml --limit 30" in snippets["rss_cron_every_4_hours"]
+    assert "python -m app.main monitor" in snippets["manual_telegram_monitor"]
 
 
 def test_recommended_feed_candidates_are_practical_for_user_goals() -> None:
