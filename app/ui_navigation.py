@@ -3,6 +3,7 @@ from __future__ import annotations
 
 TOP_LEVEL_TABS = [
     "Dashboard",
+    "Source Intake",
     "Signals Inbox",
     "Creator Workspace",
     "Assets",
@@ -30,6 +31,7 @@ BRIEFING_FEEDBACK_TABS = [
 def navigation_summary() -> list[dict[str, object]]:
     return [
         {"section": "Dashboard", "children": [], "description": "Health, counts, and next actions."},
+        {"section": "Source Intake", "children": [], "description": "Fetch Telegram signals, inspect sources, plan scheduling, and review feed candidates."},
         {"section": "Signals Inbox", "children": [], "description": "Review signals, feedback, and quick assets."},
         {"section": "Creator Workspace", "children": CREATOR_WORKSPACE_TABS, "description": "Create, check, queue, export, and archive creator work."},
         {"section": "Assets", "children": ASSET_WORKSPACE_TABS, "description": "Generate and review reusable assets."},
