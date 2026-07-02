@@ -9,7 +9,7 @@ from rich.table import Table
 
 from app.config import load_settings
 from app.llm_provider import create_analyzer
-from app.rss_feed_connector import FeedRegistry, feed_rows, fetch_feed_signals
+from app.rss_feed_connector import FeedRegistry, feed_rows, fetch_feed_signals, settings_with_feed_routing
 from app.signal_processor import SignalProcessor
 from app.storage import SignalStore
 from app.telegram_client import TelegramSignalClient
@@ -18,19 +18,21 @@ console = Console()
 
 
 async def run_rss_backfill(feeds_path: str, limit: int, fetch_articles: bool, send: bool) -> None:
-    settings = load_settings()
+    base_settings = load_settings()
     registry = FeedRegistry.from_yaml(Path(feeds_path))
     feeds = registry.enabled_feeds()
     if not feeds:
         console.print(f"[yellow]No enabled feeds found in {feeds_path}.[/yellow]")
         return
 
+    settings = settings_with_feed_routing(base_settings, registry)
     store = SignalStore(settings.database_path)
     analyzer = create_analyzer(settings)
     processor = SignalProcessor(settings=settings, store=store, analyzer=analyzer, console=console)
     telegram = TelegramSignalClient(settings) if send else None
 
     console.print(f"[bold]RSS backfill:[/bold] feeds={len(feeds)} limit={limit} fetch_articles={fetch_articles} send={send}")
+    console.print("[dim]Feed-specific min_save_score and destination routing are active.[/dim]")
     signals = await fetch_feed_signals(feeds, limit_per_feed=limit, fetch_articles=fetch_articles)
 
     if telegram:
