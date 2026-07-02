@@ -12,12 +12,13 @@ from app.ui_navigation import (
 def test_top_level_tabs_are_simplified() -> None:
     assert TOP_LEVEL_TABS == [
         "Dashboard",
+        "Source Intake",
         "Signals Inbox",
         "Creator Workspace",
         "Assets",
         "Briefings & Feedback",
     ]
-    assert len(TOP_LEVEL_TABS) == 5
+    assert len(TOP_LEVEL_TABS) == 6
 
 
 def test_creator_workspace_keeps_creator_flows() -> None:
@@ -40,3 +41,4 @@ def test_navigation_summary_is_dashboard_friendly() -> None:
     assert len(summary) == len(TOP_LEVEL_TABS)
     assert [item["section"] for item in summary] == TOP_LEVEL_TABS
     assert all("description" in item for item in summary)
+    assert any(item["section"] == "Source Intake" for item in summary)

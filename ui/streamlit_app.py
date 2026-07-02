@@ -16,6 +16,7 @@ from app.export_archive_ui import render_export_archive_workflow
 from app.models import StoredAsset, StoredSignal
 from app.publishing_queue_ui import render_publishing_queue
 from app.quality_gate_ui import render_quality_gate_dashboard
+from app.source_intake_ui import render_source_intake
 from app.storage import SignalStore
 from app.telegram_client import TelegramSignalClient
 from app.ui_navigation import (
@@ -70,7 +71,7 @@ def get_runtime() -> tuple[object, SignalStore]:
 
 def main() -> None:
     st.title("Praveen Signal OS")
-    st.caption("Local dashboard for signals, creator workflows, quality gates, exports, feedback, assets, briefings, and source intelligence.")
+    st.caption("Local dashboard for source intake, signals, creator workflows, assets, briefings, and feedback intelligence.")
 
     try:
         settings, store = get_runtime()
@@ -84,12 +85,14 @@ def main() -> None:
     with tabs[0]:
         render_dashboard(store)
     with tabs[1]:
-        render_signals_inbox(settings, store)
+        render_source_intake(settings, store)
     with tabs[2]:
-        render_creator_workspace(settings, store)
+        render_signals_inbox(settings, store)
     with tabs[3]:
-        render_assets_workspace(settings, store)
+        render_creator_workspace(settings, store)
     with tabs[4]:
+        render_assets_workspace(settings, store)
+    with tabs[5]:
         render_briefings_feedback_workspace(settings, store)
 
 
@@ -105,10 +108,10 @@ def render_dashboard(store: SignalStore) -> None:
 
     st.subheader("Main actions")
     c1, c2, c3, c4 = st.columns(4)
-    c1.info("1. Review new signals")
-    c2.info("2. Create in Creator Workspace")
-    c3.info("3. Generate or review assets")
-    c4.info("4. Brief and learn from feedback")
+    c1.info("1. Fetch from Source Intake")
+    c2.info("2. Review Signals Inbox")
+    c3.info("3. Create in Creator Workspace")
+    c4.info("4. Generate assets or briefs")
 
     st.subheader("Workspace map")
     st.table(navigation_summary())

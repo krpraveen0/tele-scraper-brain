@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import streamlit as st
+
+from app.config import Settings
+from app.source_intake import (
+    command_rows,
+    configured_source_rows,
+    feed_candidate_rows,
+    intake_commands,
+    scheduler_snippets,
+    source_quality_rows,
+    source_recommendation_rows,
+)
+from app.storage import SignalStore
+
+
+def render_source_intake(settings: Settings, store: SignalStore) -> None:
+    st.subheader("Source Intake")
+    st.caption("Fetch Telegram signals, understand source quality, prepare scheduling, and discover useful blog/feed candidates.")
+
+    tabs = st.tabs(["Fetch Now", "Configured Sources", "Source Quality", "Scheduling", "Feed Candidates"])
+    with tabs[0]:
+        render_fetch_now()
+    with tabs[1]:
+        render_configured_sources(settings)
+    with tabs[2]:
+        render_source_quality(store)
+    with tabs[3]:
+        render_scheduling()
+    with tabs[4]:
+        render_feed_candidates()
+
+
+def render_fetch_now() -> None:
+    st.markdown("### Telegram Backfill")
+    st.write("Run a one-time Telegram extraction from configured sources. This uses the existing CLI command under the hood.")
+
+    limit = st.slider("Messages per source", min_value=1, max_value=200, value=20, step=5, key="intake_backfill_limit")
+    send = st.checkbox("Forward saved signals to Telegram destination", value=False, key="intake_backfill_send")
+    command = intake_commands(limit=limit, send=send)[0].command
+
+    st.code(command, language="bash")
+    st.warning("If Telegram asks for first-time login/OTP, run the command in your terminal first. Streamlit is best after the session is already authenticated.")
+
+    if st.button("Run Backfill Now", type="primary", key="run_backfill_now"):
+        result = run_command(command)
+        if result.returncode == 0:
+            st.success("Backfill completed.")
+        else:
+            st.error(f"Backfill failed with exit code {result.returncode}.")
+        if result.stdout:
+            st.text_area("Output", result.stdout, height=240)
+        if result.stderr:
+            st.text_area("Errors", result.stderr, height=160)
+
+    st.markdown("### Useful intake commands")
+    st.dataframe(command_rows(intake_commands(limit=limit, send=send)), use_container_width=True, hide_index=True)
+
+
+def render_configured_sources(settings: Settings) -> None:
+    st.markdown("### Configured Telegram Sources")
+    st.write(f"Config file: `{settings.sources_config_path}`")
+    rows = configured_source_rows(settings)
+    if rows:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No configured sources found. Add Telegram channels/groups to sources.yaml or SOURCE_CHATS.")
+
+
+def render_source_quality(store: SignalStore) -> None:
+    st.markdown("### Source Quality")
+    stats = source_quality_rows(store)
+    if stats:
+        st.dataframe(stats, use_container_width=True, hide_index=True)
+    else:
+        st.info("No source stats yet. Run a backfill first.")
+
+    min_samples = st.slider("Minimum samples for recommendations", min_value=1, max_value=100, value=10, step=1)
+    recommendations = source_recommendation_rows(store, min_samples=min_samples)
+    if recommendations:
+        st.markdown("### Tuning Recommendations")
+        st.dataframe(recommendations, use_container_width=True, hide_index=True)
+    else:
+        st.info("No recommendations yet. Collect more data first.")
+
+
+def render_scheduling() -> None:
+    st.markdown("### Scheduling")
+    limit = st.slider("Scheduled backfill limit", min_value=1, max_value=200, value=20, step=5, key="scheduler_limit")
+    snippets = scheduler_snippets(limit=limit)
+
+    st.write("Use these as starting points for cron, launchd, or a small always-on terminal process.")
+    for title, command in snippets.items():
+        st.markdown(f"**{title}**")
+        st.code(command, language="bash")
+
+    st.info("The app currently generates scheduler commands; it does not install OS-level cron/launchd jobs for you.")
+
+
+def render_feed_candidates() -> None:
+    st.markdown("### Blog / Feed Candidates")
+    st.write("These are high-signal candidates for your AI engineering, training, research, product, and content workflows.")
+    st.dataframe(feed_candidate_rows(), use_container_width=True, hide_index=True)
+    st.info("Current production intake is Telegram-first. RSS/blog ingestion should be added as a separate connector after this UI is merged.")
+
+
+def run_command(command: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command.split(),
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=900,
+        cwd=None,
+    )
