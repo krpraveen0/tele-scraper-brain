@@ -13,6 +13,13 @@ ALLOWED_VOICE_SURFACES = {
     "general",
 }
 
+VOICE_SURFACE_ALIASES = {
+    "story_book": "storybook",
+    "story_books": "storybook",
+    "story_book_chapter": "storybook",
+    "story_chapter": "storybook",
+}
+
 GENERIC_AI_PHRASES = (
     "in today's fast-paced world",
     "unlock the power",
@@ -88,6 +95,7 @@ class VoiceReview:
 
 def normalize_surface(value: str) -> str:
     normalized = str(value or "general").strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = VOICE_SURFACE_ALIASES.get(normalized, normalized)
     if normalized not in ALLOWED_VOICE_SURFACES:
         allowed = ", ".join(sorted(ALLOWED_VOICE_SURFACES))
         raise ValueError(f"Unsupported voice surface '{value}'. Allowed surfaces: {allowed}")
