@@ -18,6 +18,13 @@ from app.publishing_queue_ui import render_publishing_queue
 from app.quality_gate_ui import render_quality_gate_dashboard
 from app.storage import SignalStore
 from app.telegram_client import TelegramSignalClient
+from app.ui_navigation import (
+    ASSET_WORKSPACE_TABS,
+    BRIEFING_FEEDBACK_TABS,
+    CREATOR_WORKSPACE_TABS,
+    TOP_LEVEL_TABS,
+    navigation_summary,
+)
 from app.ui_services import (
     add_feedback_label,
     allowed_asset_types,
@@ -72,39 +79,18 @@ def main() -> None:
         st.exception(exc)
         return
 
-    tabs = st.tabs([
-        "Dashboard",
-        "Signals Inbox",
-        "Creator Studio",
-        "Quality Gate",
-        "Export & Archive",
-        "Publishing Queue",
-        "Asset Studio",
-        "Briefings",
-        "Feedback Profile",
-        "Assets",
-    ])
+    tabs = st.tabs(TOP_LEVEL_TABS)
 
     with tabs[0]:
         render_dashboard(store)
     with tabs[1]:
         render_signals_inbox(settings, store)
     with tabs[2]:
-        render_creator_studio_v2(store)
+        render_creator_workspace(settings, store)
     with tabs[3]:
-        render_quality_gate_dashboard()
+        render_assets_workspace(settings, store)
     with tabs[4]:
-        render_export_archive_workflow(settings.asset_export_dir)
-    with tabs[5]:
-        render_publishing_queue(settings.database_path)
-    with tabs[6]:
-        render_asset_studio(settings, store)
-    with tabs[7]:
-        render_briefings(settings, store)
-    with tabs[8]:
-        render_feedback_profile(store)
-    with tabs[9]:
-        render_assets(settings, store)
+        render_briefings_feedback_workspace(settings, store)
 
 
 def render_dashboard(store: SignalStore) -> None:
@@ -119,10 +105,13 @@ def render_dashboard(store: SignalStore) -> None:
 
     st.subheader("Main actions")
     c1, c2, c3, c4 = st.columns(4)
-    c1.info("1. Open Signals Inbox")
-    c2.info("2. Create or inspect Creator Studio outputs")
-    c3.info("3. Run Quality Gate before publishing")
-    c4.info("4. Export, archive, queue, or send assets")
+    c1.info("1. Review new signals")
+    c2.info("2. Create in Creator Workspace")
+    c3.info("3. Generate or review assets")
+    c4.info("4. Brief and learn from feedback")
+
+    st.subheader("Workspace map")
+    st.table(navigation_summary())
 
     left, right = st.columns(2)
     with left:
@@ -138,6 +127,43 @@ def render_dashboard(store: SignalStore) -> None:
             st.table([{"source": name, "count": count} for name, count in snapshot.top_sources])
         else:
             st.info("No source data yet. Run backfill or monitor first.")
+
+
+def render_creator_workspace(settings: object, store: SignalStore) -> None:
+    st.subheader("Creator Workspace")
+    st.caption("Create, check, queue, export, and archive creator outputs from one place.")
+    tabs = st.tabs(CREATOR_WORKSPACE_TABS)
+
+    with tabs[0]:
+        render_creator_studio_v2(store)
+    with tabs[1]:
+        render_quality_gate_dashboard()
+    with tabs[2]:
+        render_publishing_queue(settings.database_path)  # type: ignore[attr-defined]
+    with tabs[3]:
+        render_export_archive_workflow(settings.asset_export_dir)  # type: ignore[attr-defined]
+
+
+def render_assets_workspace(settings: object, store: SignalStore) -> None:
+    st.subheader("Assets")
+    st.caption("Generate reusable assets and review saved asset history.")
+    tabs = st.tabs(ASSET_WORKSPACE_TABS)
+
+    with tabs[0]:
+        render_asset_studio(settings, store)
+    with tabs[1]:
+        render_assets(settings, store)
+
+
+def render_briefings_feedback_workspace(settings: object, store: SignalStore) -> None:
+    st.subheader("Briefings & Feedback")
+    st.caption("Turn recent signals and feedback labels into operating intelligence.")
+    tabs = st.tabs(BRIEFING_FEEDBACK_TABS)
+
+    with tabs[0]:
+        render_briefings(settings, store)
+    with tabs[1]:
+        render_feedback_profile(store)
 
 
 def render_signals_inbox(settings: object, store: SignalStore) -> None:
@@ -237,7 +263,7 @@ def render_quick_assets(settings: object, store: SignalStore, signal: StoredSign
 
 
 def render_asset_studio(settings: object, store: SignalStore) -> None:
-    st.subheader("Asset Studio")
+    st.subheader("Generate Asset")
     signals = list_signals(store, view="All", limit=200)
     if not signals:
         st.info("No saved signals yet. Run backfill or monitor first.")
@@ -281,7 +307,7 @@ def render_asset_studio(settings: object, store: SignalStore) -> None:
 
 
 def render_briefings(settings: object, store: SignalStore) -> None:
-    st.subheader("Daily Action Brief")
+    st.subheader("Daily Brief")
     hours = st.slider("Lookback hours", min_value=1, max_value=168, value=24)
     limit = st.slider("Signal limit", min_value=10, max_value=300, value=60, step=10, key="brief_limit")
 
