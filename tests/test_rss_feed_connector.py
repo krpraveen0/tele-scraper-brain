@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.models import TelegramSignal
+from app.models import SignalAnalysis, TelegramSignal
 from app.rss_feed_connector import (
     FeedRegistry,
     FeedSource,
     clean_text,
     feed_rows,
+    feed_source_registry,
     parse_feed_text,
     stable_message_id,
 )
@@ -81,6 +82,22 @@ def test_parse_feed_text_returns_telegram_signals() -> None:
     assert "Title: Agent Context Patterns" in signal.message_text
     assert "Category hint: AI Engineering" in signal.message_text
     assert "How teams manage context" in signal.message_text
+
+
+def test_feed_source_registry_applies_feed_threshold_and_route() -> None:
+    feed = FeedSource(
+        name="Research Feed",
+        url="https://example.com/research.xml",
+        min_save_score=8.5,
+        destination="research",
+    )
+    signal = parse_feed_text(feed, SAMPLE_FEED, limit=1)[0]
+    registry = feed_source_registry(FeedRegistry([feed]))
+    analysis = SignalAnalysis(category="AI Engineering", score=9.0, is_valuable=True)
+
+    assert registry.min_score_for(signal, default_min_score=7.0) == 8.5
+    assert registry.destination_key_for(signal, analysis) == "research"
+    assert registry.destination_chat_for(signal, analysis, {"default": "default-chat", "research": "research-chat"}, "default-chat") == "research-chat"
 
 
 def test_stable_message_id_is_repeatable() -> None:
